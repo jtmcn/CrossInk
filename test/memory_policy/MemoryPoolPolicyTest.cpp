@@ -77,7 +77,7 @@ TEST_F(MemoryPoolPolicyTest, JpegDecoderRejectsFragmentedPsramAndSafelyFallsBack
   EXPECT_EQ(MemoryBudget::jpegDecoderPool(decoderBytes), MemoryPool::Internal);
 }
 
-TEST_F(MemoryPoolPolicyTest, InlineImageAdmissionUsesPsramOnlyForJpeg) {
+TEST_F(MemoryPoolPolicyTest, InlineImageAdmissionUsesPsramForDecoderWorkingSets) {
   fakeheap::internal.free = MemoryBudget::IMAGE_DECODER_HEADROOM;
   fakeheap::internal.largest = 1;
   fakeheap::external.free = MemoryBudget::EPUB_PSRAM_RESERVE + MemoryBudget::JPEG_DECODER_APPROX_BYTES;
@@ -85,6 +85,13 @@ TEST_F(MemoryPoolPolicyTest, InlineImageAdmissionUsesPsramOnlyForJpeg) {
 
   EXPECT_TRUE(MemoryBudget::hasHeapForEpubInlineImage("TEST", "image.jpg"));
   EXPECT_TRUE(MemoryBudget::hasHeapForEpubInlineImage("TEST", "image.JPEG"));
+  // PSRAM too small for the non-JPEG working set.
+  EXPECT_FALSE(MemoryBudget::hasHeapForEpubInlineImage("TEST", "image.png"));
+
+  fakeheap::external.free = MemoryBudget::EPUB_PSRAM_RESERVE + MemoryBudget::EPUB_INLINE_IMAGE_MIN_FREE;
+  fakeheap::external.largest = MemoryBudget::EPUB_INLINE_IMAGE_MIN_MAX_ALLOC;
+  EXPECT_TRUE(MemoryBudget::hasHeapForEpubInlineImage("TEST", "image.png"));
+  fakeheap::internal.free = MemoryBudget::IMAGE_DECODER_HEADROOM - 1;
   EXPECT_FALSE(MemoryBudget::hasHeapForEpubInlineImage("TEST", "image.png"));
 
   fakeheap::internal.free = MemoryBudget::EPUB_INLINE_IMAGE_MIN_FREE;
@@ -96,6 +103,72 @@ TEST_F(MemoryPoolPolicyTest, InlineImageAdmissionUsesPsramOnlyForJpeg) {
   EXPECT_FALSE(MemoryBudget::hasHeapForOptimizerPxcImage("TEST", "image.pxc"));
   fakeheap::internal.free = MemoryBudget::EPUB_OPTIMIZER_PXC_MIN_FREE;
   EXPECT_TRUE(MemoryBudget::hasHeapForOptimizerPxcImage("TEST", "image.pxc"));
+}
+
+TEST_F(MemoryPoolPolicyTest, InlineImageAdmissionKeepsInternalGateWithoutPsram) {
+  fakeheap::reset(false);
+  fakeheap::internal.free = MemoryBudget::EPUB_INLINE_IMAGE_MIN_FREE - 1;
+  fakeheap::internal.largest = MemoryBudget::EPUB_INLINE_IMAGE_MIN_MAX_ALLOC;
+  EXPECT_FALSE(MemoryBudget::hasHeapForEpubInlineImage("TEST", "image.png"));
+  fakeheap::internal.free = MemoryBudget::EPUB_INLINE_IMAGE_MIN_FREE;
+  EXPECT_TRUE(MemoryBudget::hasHeapForEpubInlineImage("TEST", "image.png"));
+}
+
+TEST_F(MemoryPoolPolicyTest, ImageDecoderAdmitsPsramWhileRetainingInternalHeadroom) {
+  constexpr uint32_t decoderBytes = 44U * 1024U;
+  fakeheap::internal.free = MemoryBudget::IMAGE_DECODER_HEADROOM;
+  fakeheap::internal.largest = 1;
+  fakeheap::external.free = MemoryBudget::EPUB_PSRAM_RESERVE + decoderBytes;
+  fakeheap::external.largest = decoderBytes;
+  EXPECT_TRUE(MemoryBudget::hasHeapForImageDecoder("TEST", "PNG", decoderBytes));
+
+  fakeheap::internal.free = MemoryBudget::IMAGE_DECODER_HEADROOM - 1;
+  EXPECT_FALSE(MemoryBudget::hasHeapForImageDecoder("TEST", "PNG", decoderBytes));
+
+  fakeheap::reset(false);
+  fakeheap::internal.free = decoderBytes + MemoryBudget::IMAGE_DECODER_HEADROOM - 1;
+  EXPECT_FALSE(MemoryBudget::hasHeapForImageDecoder("TEST", "PNG", decoderBytes));
+}
+
+TEST_F(MemoryPoolPolicyTest, OptionalRebuildUsesPsramAboveTextLayoutFloor) {
+  using namespace MemoryBudget;
+  fakeheap::internal.free = EPUB_TEXT_LAYOUT_MIN_FREE;
+  fakeheap::internal.largest = 1;
+  fakeheap::external.free = EPUB_PSRAM_RESERVE + OPTIONAL_EPUB_REBUILD_MIN_FREE;
+  fakeheap::external.largest = OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC;
+  EXPECT_TRUE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
+
+  fakeheap::internal.free = EPUB_TEXT_LAYOUT_MIN_FREE - 1;
+  EXPECT_FALSE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
+
+  fakeheap::internal.free = EPUB_TEXT_LAYOUT_MIN_FREE;
+  fakeheap::external.free = EPUB_PSRAM_RESERVE + OPTIONAL_EPUB_REBUILD_MIN_FREE - 1;
+  EXPECT_FALSE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
+
+  fakeheap::reset(false);
+  fakeheap::internal.free = OPTIONAL_EPUB_REBUILD_MIN_FREE - 1;
+  fakeheap::internal.largest = OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC;
+  EXPECT_FALSE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
+  fakeheap::internal.free = OPTIONAL_EPUB_REBUILD_MIN_FREE;
+  EXPECT_TRUE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
+}
+
+TEST_F(MemoryPoolPolicyTest, SdFontCachesStayWarmWhenImageFitsPsram) {
+  using namespace MemoryBudget;
+  fakeheap::internal.free = IMAGE_DECODER_HEADROOM;
+  fakeheap::internal.largest = 1;
+  fakeheap::external.free = EPUB_PSRAM_RESERVE + EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_FREE;
+  fakeheap::external.largest = EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_MAX_ALLOC;
+  EXPECT_FALSE(shouldReleaseSdFontCachesForEpubInlineImage(snapshot()));
+
+  fakeheap::external.largest = EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_MAX_ALLOC - 1;
+  EXPECT_TRUE(shouldReleaseSdFontCachesForEpubInlineImage(snapshot()));
+
+  fakeheap::reset(false);
+  fakeheap::internal.free = EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_FREE - 1;
+  EXPECT_TRUE(shouldReleaseSdFontCachesForEpubInlineImage(snapshot()));
+  fakeheap::internal.free = EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_FREE;
+  EXPECT_FALSE(shouldReleaseSdFontCachesForEpubInlineImage(snapshot()));
 }
 
 namespace {

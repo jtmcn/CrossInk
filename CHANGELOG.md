@@ -3,6 +3,7 @@
 ### Changed
 
 - X4 Pro and X4 Classic place medium-sized allocations (over 1 KB) in PSRAM, matching the Sticky, which leaves more internal memory for reading features.
+- PSRAM readers (X4 Pro, X4 Classic, Sticky) count PSRAM when deciding whether to index the next chapter in the background, decode PNG images, or clear font caches, so these features are skipped less often. X3/X4 behavior is unchanged.
 
 ## [v1.6.0] - 2026-09-21
 

@@ -6378,7 +6378,12 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   nextSection.reset();
 
   releaseGrayscaleStripScratch();
+  // PSRAM readers keep warm glyph caches when the prefetch already fits in PSRAM.
+  const bool prefetchFitsPsram = MemoryBudget::admitsPsramWorkingSet(MemoryBudget::EPUB_TEXT_LAYOUT_MIN_FREE,
+                                                                     MemoryBudget::OPTIONAL_EPUB_REBUILD_MIN_FREE,
+                                                                     MemoryBudget::OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC);
   const bool releasedSdFontCaches =
+      !prefetchFitsPsram &&
       releaseReaderSdFontCachesForLowMemory(renderer, "ERS", "preparing silent next-chapter indexing");
   const uint32_t minFreeForPrefetch = releasedSdFontCaches
                                           ? MemoryBudget::OPTIONAL_EPUB_PREFETCH_AFTER_SD_FONT_RELEASE_MIN_FREE
