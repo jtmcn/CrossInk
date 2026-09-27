@@ -106,6 +106,14 @@ inline bool hasHeap(const HeapSnapshot heap, const uint32_t minFree, const uint3
   return heap.freeHeap >= minFree && heap.maxAllocHeap >= minMaxAlloc;
 }
 
+// On PSRAM readers, malloc() and EPUB arenas place large working sets externally, so a C3-sized
+// internal gate over-rejects. Admit when internal RAM keeps a floor and PSRAM fits the working set.
+inline bool admitsPsramWorkingSet(const uint32_t internalFloor, const uint32_t bytes, const uint32_t largest) {
+  const auto psram = byteHeapSnapshot(MemoryPool::Psram);
+  return psram.total != 0 && admits(byteHeapSnapshot(MemoryPool::Internal), {0, 0, internalFloor}) &&
+         admits(psram, {bytes, largest, EPUB_PSRAM_RESERVE});
+}
+
 // Text layout starts with small, fallible allocations: a 4 KB scratch arena and
 // a ParsedText object. The operations which really need a large contiguous block
 // (table buffering, advance prewarming, and image decoding) each have their own
@@ -182,6 +190,11 @@ inline HeapRequirement epubInlineImageRequirementForSource(const char* source) {
 }
 
 inline bool shouldReleaseSdFontCachesForEpubInlineImage(const HeapSnapshot heap) {
+  // PSRAM readers keep glyph caches when the image working set already fits externally.
+  if (admitsPsramWorkingSet(IMAGE_DECODER_HEADROOM, EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_FREE,
+                            EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_MAX_ALLOC)) {
+    return false;
+  }
   return !hasHeap(heap, EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_FREE, EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_MAX_ALLOC);
 }
 
@@ -190,7 +203,8 @@ inline bool hasHeapForEpubInlineImage(const char* tag, const char* source) {
 
   const auto heap = snapshot();
   const auto requirement = epubInlineImageRequirementForSource(source);
-  if (hasHeap(heap, requirement.minFree, requirement.minMaxAlloc)) {
+  if (hasHeap(heap, requirement.minFree, requirement.minMaxAlloc) ||
+      admitsPsramWorkingSet(IMAGE_DECODER_HEADROOM, requirement.minFree, requirement.minMaxAlloc)) {
     return true;
   }
 
@@ -214,7 +228,8 @@ inline bool hasHeapForOptionalEpubRebuild(const char* tag, const char* action, c
                                           const uint32_t minFree = OPTIONAL_EPUB_REBUILD_MIN_FREE,
                                           const uint32_t minMaxAlloc = OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC) {
   const auto heap = snapshot();
-  if (hasHeap(heap, minFree, minMaxAlloc)) {
+  // Keep the chapter parser's own text-layout floor internal; the rest can come from PSRAM.
+  if (hasHeap(heap, minFree, minMaxAlloc) || admitsPsramWorkingSet(EPUB_TEXT_LAYOUT_MIN_FREE, minFree, minMaxAlloc)) {
     return true;
   }
 
@@ -226,7 +241,9 @@ inline bool hasHeapForOptionalEpubRebuild(const char* tag, const char* action, c
 inline bool hasHeapForImageDecoder(const char* tag, const char* decoderName, const uint32_t decoderApproxBytes) {
   const auto heap = snapshot();
   const uint32_t minFree = decoderApproxBytes + IMAGE_DECODER_HEADROOM;
-  if (hasHeap(heap, minFree, decoderApproxBytes)) {
+  // Decoder objects come from operator new, which lands in PSRAM on PSRAM readers.
+  if (hasHeap(heap, minFree, decoderApproxBytes) ||
+      admitsPsramWorkingSet(IMAGE_DECODER_HEADROOM, decoderApproxBytes, decoderApproxBytes)) {
     return true;
   }
 
