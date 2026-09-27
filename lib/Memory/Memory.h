@@ -11,6 +11,9 @@
 #if defined(ARDUINO_ARCH_ESP32) && !defined(SIMULATOR)
 #include <esp_heap_caps.h>
 #include <esp_memory_utils.h>
+#if __has_include(<sdkconfig.h>)  // absent in host test stubs
+#include <sdkconfig.h>
+#endif
 #endif
 
 // Nothrow versions of std::make_unique. Return nullptr on allocation failure
@@ -58,6 +61,22 @@ using HeapByteBuffer = std::unique_ptr<uint8_t[], HeapByteBufferDeleter>;
 inline bool psramHeapAvailable() {
 #if defined(ARDUINO_ARCH_ESP32) && !defined(SIMULATOR)
   return heap_caps_get_total_size(MALLOC_CAP_SPIRAM) > 0;
+#else
+  return false;
+#endif
+}
+
+// malloc() sends allocations at or below this size to internal RAM and larger ones to PSRAM.
+constexpr size_t PSRAM_MALLOC_ALWAYS_INTERNAL_BYTES = 1024;
+
+// X4 Pro/Classic keep PioArduino's prebuilt 4 KB threshold (no custom_sdkconfig); match Sticky's
+// tuned 1 KB at runtime. Returns true if the threshold was changed.
+inline bool applyPsramMallocThreshold() {
+#if defined(ARDUINO_ARCH_ESP32) && !defined(SIMULATOR) && CONFIG_SPIRAM_USE_MALLOC && \
+    CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL > 1024
+  if (!psramHeapAvailable()) return false;
+  heap_caps_malloc_extmem_enable(PSRAM_MALLOC_ALWAYS_INTERNAL_BYTES);
+  return true;
 #else
   return false;
 #endif

@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Changed
+
+- X4 Pro and X4 Classic place medium-sized allocations (over 1 KB) in PSRAM, matching the Sticky, which leaves more internal memory for reading features.
+
 ## [v1.6.0] - 2026-09-21
 
 ### Added
