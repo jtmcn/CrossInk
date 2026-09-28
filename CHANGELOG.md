@@ -4,6 +4,7 @@
 
 - X4 Pro and X4 Classic place medium-sized allocations (over 1 KB) in PSRAM, matching the Sticky, which leaves more internal memory for reading features.
 - PSRAM readers (X4 Pro, X4 Classic, Sticky) count PSRAM when deciding whether to index the next chapter in the background, decode PNG images, or clear font caches, so these features are skipped less often. X3/X4 behavior is unchanged.
+- On X4 Pro and X4 Classic units with the UltraChip UC8279 display, anti-aliased page turns skip redundant display memory uploads, so text smooths sooner and the next turn is ready sooner (on one X4 Pro, about 75 ms and 135 ms respectively).
 
 ## [v1.6.0] - 2026-09-21
 
