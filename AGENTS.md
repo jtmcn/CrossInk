@@ -48,7 +48,10 @@ SDK.
 - `default`: Xteink X3/X4, ESP32-C3, buttons, SPI SD, no touch/PSRAM/USB Drive.
 - `sticky`: reTerminal Sticky, ESP32-S3, touch, SPI SD, PSRAM framebuffer.
 - `x4-pro`: Xteink X4 Pro, ESP32-S3, touch, SDMMC, PSRAM framebuffer, and USB Drive capability.
-- `simulator`, `simulator-X3`, `sticky-simulator`, and `x4-pro-simulator`: native profiles. Match the simulator profile to the capability/device branch being changed.
+- `x4-classic`: Xteink X4 Classic, same S3 panel/SDMMC/PSRAM/USB Drive as X4 Pro, buttons only (no touch or frontlight).
+- `debug`, `sticky-debug`, `x4-pro-debug`, `x4-classic-debug`: `LOG_LEVEL=2` plus `CROSSPOINT_WAIT_FOR_USB_SERIAL`, so boot pauses for a USB serial host. Use them for serial diagnosis; flash the release env for daily use.
+- X4 Pro/Classic extend `base`, not `firmware_tuned`: they keep PioArduino's prebuilt sdkconfig so `arduino_tinyusb` stays intact for USB Drive. Never add `custom_sdkconfig` to them; tune at runtime instead (e.g. `applyPsramMallocThreshold()` in `setup()`).
+- `simulator`, `simulator-X3`, `sticky-simulator`, `x4-pro-simulator`, and `x4-classic-simulator`: native profiles. Match the simulator profile to the capability/device branch being changed.
 - `platformio.ini` is the capability-source build matrix. Read the matching environment's flags before adding `#if` branches; use `AppCapabilities`/device capability helpers rather than duplicating macro checks in activities.
 
 ## Core Rules
@@ -102,6 +105,7 @@ SDK.
 10. Prefer `makeUniqueNoThrow<T>()` / `makeUniqueNoThrow<T[]>()` for owned heap allocations so cleanup is automatic on early returns.
 11. Use raw `malloc` or `new (std::nothrow)` only when a C or SDK API takes ownership; add a short comment explaining that ownership transfer.
 12. Treat PSRAM as a device capability, not a universal assumption. Keep shared paths within C3 limits or gate S3-only allocations behind the relevant board/capability macro, and handle PSRAM allocation failure.
+13. `ESP.getFreeHeap()`/`ESP.getMaxAllocHeap()` and `MemoryBudget::snapshot()` report internal RAM only. For admission gates that should count PSRAM, use `lib/MemoryBudget/` (`PoolBudget.h` `admits`/`canAllocatePsram`, `MemoryBudget::admitsPsramWorkingSet`) instead of adding another internal-only threshold.
 
 ## HAL And Platform Rules
 
@@ -160,7 +164,12 @@ SDK.
   - `pio run -e sticky` for the ESP32-S3 Sticky firmware.
   - `pio run -e x4-pro` for the ESP32-S3 X4 Pro firmware.
   - `pio check -e default --fail-on-defect low --fail-on-defect medium --fail-on-defect high` for static analysis.
-  - `find src lib include test -name "*.cpp" -o -name "*.h" | xargs clang-format -i` for formatting touched C++ files.
+  - `./bin/clang-format-fix` for formatting C++ (needs clang-format 21+).
+- Native host tests (gtest via CMake/CTest; there is no working `pio run -t unit-tests`, because `scripts/register_unit_tests_target.py` is not in any env's `extra_scripts`):
+  - All: `cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release && cmake --build build/test -j && ctest --test-dir build/test --output-on-failure -j`
+  - One suite or test: `cmake --build build/test --target MemoryPoolPolicyTest && ctest --test-dir build/test -R 'MemoryPoolPolicyTest\.'`
+  - Suites compile app headers against per-suite stubs (e.g. `test/memory_policy/stubs/esp_heap_caps.h`, whose `fakeheap` drives internal/PSRAM snapshots). Headers they include must build without ESP-IDF headers; guard `sdkconfig.h` with `__has_include`.
+- SDK display-driver host tests replay a recording `EpdBus`: `python3 freeink-sdk/libs/display/FreeInkDisplay/test/host/run_pro.py` (also `run_uc8279.py`, `run_uc8253_power.py`). Run them after any `freeink-sdk` display change.
 - For crash debugging, check serial logs, internal heap with `ESP.getFreeHeap()` and `ESP.getMaxAllocHeap()`, task stack high-water marks, and whether cache files need clearing. On S3 targets, also inspect PSRAM free space and largest allocatable block; abundant PSRAM does not prove that internal-RAM or DMA-capable allocations can succeed.
 - Hardware verification should mention the concrete device path to test, expected UI/log behavior, and any cache reset needed.
 
@@ -188,6 +197,16 @@ SDK.
 - Before staging, ensure ignored/generated/local files such as `.pio/`, `*.generated.h`, `compile_commands.json`, and `platformio.local.ini` are not included.
 - Branch names should use repo-style prefixes such as `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, or `chore/`.
 - Suggested commit messages should follow `<type>: <short summary>`, using types like `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf`.
+
+### freeink-sdk Fork
+
+CrossInk pins `freeink-sdk` from the `jtmcn/freeink-sdk` fork so it can carry SDK fixes before upstream (`Free-Ink/freeink-sdk`) merges them. Inside `freeink-sdk/`, remote `origin` is upstream and `fork` is the fork.
+
+- **Fork `main`** mirrors upstream exactly: `git fetch origin && git push fork origin/main:main`. SDK work goes on branches.
+- **Topic branches** (`joel/<desc>`) hold one change each, based on the upstream commit CrossInk pins, and are the head of the upstream PR.
+- **`crossink`** is the integration branch CrossInk pins (`.gitmodules`: fork URL, `branch = crossink`): an upstream commit plus every unmerged topic branch, combined with `--no-ff` merges. Update it only by merging so every pinned SHA stays reachable; before any rewrite of a pinned commit, tag it `crossink-pin/<date>` and push the tag.
+- **Upstream sync**: merge `origin/main` into `crossink`, then build `x4-pro`, `default`, and `simulator` before advancing the gitlink. Known clash: upstream `8f97375` names a variable `local` in `FreeInkUI/include/components/media/catalog.h`, which PNGdec's `#define local static` breaks in `SleepActivity.cpp`.
+- **After upstream merges a topic**: drop it from `crossink` and delete it. Once `crossink` carries no fork-only commits, pin CrossInk to the upstream commit and point `.gitmodules` back at Free-Ink.
 
 ## Changelog
 

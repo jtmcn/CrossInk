@@ -20,6 +20,9 @@ Refer to https://freeink.org/llms.txt for guidance.
 ## Real Hardware / Storage
 
 - SdFat on hardware allows only one open reader per file path at a time. If a fallback needs to reopen the same file, close the first handle before reopening.
+- macOS upload port auto-detect can pick `/dev/cu.Bluetooth-Incoming-Port`; pass `--upload-port /dev/cu.usbmodem*`.
+- X4-family deep sleep turns USB data off even while charging, so wake the reader before flashing or monitoring. Wake from sleep is a full reboot. An RTS reset re-enumerates the USB port, so a monitor that does not reconnect misses the boot log.
+- A forward page turn cancels silent next-chapter indexing (`cancelSilentNextChapterPrefetchForForwardTurn`); to verify prefetch, wait on the penultimate page.
 
 ## Rendering / Reader Pipeline
 
