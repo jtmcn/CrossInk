@@ -132,16 +132,20 @@ TEST_F(MemoryPoolPolicyTest, ImageDecoderAdmitsPsramWhileRetainingInternalHeadro
 
 TEST_F(MemoryPoolPolicyTest, OptionalRebuildUsesPsramAboveTextLayoutFloor) {
   using namespace MemoryBudget;
-  fakeheap::internal.free = EPUB_TEXT_LAYOUT_MIN_FREE;
+  fakeheap::internal.free = OPTIONAL_EPUB_REBUILD_PSRAM_INTERNAL_MIN_FREE;
   fakeheap::internal.largest = 1;
   fakeheap::external.free = EPUB_PSRAM_RESERVE + OPTIONAL_EPUB_REBUILD_MIN_FREE;
   fakeheap::external.largest = OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC;
   EXPECT_TRUE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
 
-  fakeheap::internal.free = EPUB_TEXT_LAYOUT_MIN_FREE - 1;
+  fakeheap::internal.free = OPTIONAL_EPUB_REBUILD_PSRAM_INTERNAL_MIN_FREE - 1;
   EXPECT_FALSE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
 
+  // Sitting exactly on the parser's abort floor would abort the admitted build at once.
   fakeheap::internal.free = EPUB_TEXT_LAYOUT_MIN_FREE;
+  EXPECT_FALSE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
+
+  fakeheap::internal.free = OPTIONAL_EPUB_REBUILD_PSRAM_INTERNAL_MIN_FREE;
   fakeheap::external.free = EPUB_PSRAM_RESERVE + OPTIONAL_EPUB_REBUILD_MIN_FREE - 1;
   EXPECT_FALSE(hasHeapForOptionalEpubRebuild("TEST", "prefetch", 1));
 

@@ -46,6 +46,11 @@ constexpr uint32_t EPUB_INLINE_IMAGE_SD_FONT_RELEASE_MIN_MAX_ALLOC = 80U * 1024U
 constexpr uint32_t OPTIONAL_EPUB_REBUILD_MIN_FREE = 96U * 1024U;
 constexpr uint32_t OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC = 48U * 1024U;
 constexpr uint32_t OPTIONAL_EPUB_PREFETCH_AFTER_SD_FONT_RELEASE_MIN_FREE = 88U * 1024U;
+// PSRAM readers: internal floor for an optional rebuild. Must clear the parser's abort floor, or an
+// admitted build aborts at once and its fallbacks persist Safe Mode for the book.
+constexpr uint32_t OPTIONAL_EPUB_REBUILD_PSRAM_INTERNAL_MIN_FREE = EPUB_TEXT_LAYOUT_MIN_FREE + 20U * 1024U;
+static_assert(OPTIONAL_EPUB_REBUILD_PSRAM_INTERNAL_MIN_FREE > EPUB_TEXT_LAYOUT_MIN_FREE,
+              "optional rebuild must leave headroom above the text-layout abort floor");
 // Initial C3 guard for switching to a different dictionary .cpfont. Both total
 // free heap and contiguous maxAlloc matter because font metadata and prewarm
 // arenas are separate allocations. Hardware stress logs should tune these.
@@ -112,6 +117,19 @@ inline bool admitsPsramWorkingSet(const uint32_t internalFloor, const uint32_t b
   const auto psram = byteHeapSnapshot(MemoryPool::Psram);
   return psram.total != 0 && admits(byteHeapSnapshot(MemoryPool::Internal), {0, 0, internalFloor}) &&
          admits(psram, {bytes, largest, EPUB_PSRAM_RESERVE});
+}
+
+// Returns false on non-PSRAM readers so callers keep their original log line.
+inline bool logPsramWorkingSetRejection(const char* tag, const char* what, const uint32_t internalFloor,
+                                        const uint32_t bytes, const uint32_t largest) {
+  const auto psram = byteHeapSnapshot(MemoryPool::Psram);
+  if (psram.total == 0) return false;
+  const auto internal = byteHeapSnapshot(MemoryPool::Internal);
+  LOG_ERR(tag, "Low heap for %s (internal free=%u, psram free=%u max=%u; need internal %u + psram %u/%u + reserve %u)",
+          what, static_cast<unsigned>(internal.free), static_cast<unsigned>(psram.free),
+          static_cast<unsigned>(psram.largest), internalFloor, bytes, largest,
+          static_cast<unsigned>(EPUB_PSRAM_RESERVE));
+  return true;
 }
 
 // Text layout starts with small, fallible allocations: a 4 KB scratch arena and
@@ -207,6 +225,10 @@ inline bool hasHeapForEpubInlineImage(const char* tag, const char* source) {
       admitsPsramWorkingSet(IMAGE_DECODER_HEADROOM, requirement.minFree, requirement.minMaxAlloc)) {
     return true;
   }
+  if (logPsramWorkingSetRejection(tag, "inline image", IMAGE_DECODER_HEADROOM, requirement.minFree,
+                                  requirement.minMaxAlloc)) {
+    return false;
+  }
 
   LOG_ERR(tag, "Low heap for inline image (%u free, %u max alloc, need %u/%u); suppressing %s", heap.freeHeap,
           heap.maxAllocHeap, requirement.minFree, requirement.minMaxAlloc, source ? source : "");
@@ -228,9 +250,17 @@ inline bool hasHeapForOptionalEpubRebuild(const char* tag, const char* action, c
                                           const uint32_t minFree = OPTIONAL_EPUB_REBUILD_MIN_FREE,
                                           const uint32_t minMaxAlloc = OPTIONAL_EPUB_REBUILD_MIN_MAX_ALLOC) {
   const auto heap = snapshot();
-  // Keep the chapter parser's own text-layout floor internal; the rest can come from PSRAM.
-  if (hasHeap(heap, minFree, minMaxAlloc) || admitsPsramWorkingSet(EPUB_TEXT_LAYOUT_MIN_FREE, minFree, minMaxAlloc)) {
+  // Keep the chapter parser's text-layout floor (plus headroom) internal; the rest can come from PSRAM.
+  if (hasHeap(heap, minFree, minMaxAlloc) ||
+      admitsPsramWorkingSet(OPTIONAL_EPUB_REBUILD_PSRAM_INTERNAL_MIN_FREE, minFree, minMaxAlloc)) {
     return true;
+  }
+  if (byteHeapSnapshot(MemoryPool::Psram).total != 0) {
+    LOG_DBG(tag, "Skipping %s for spine %d: low heap (internal free=%u, need %u + psram %u/%u + reserve %u)", action,
+            spineIndex, static_cast<unsigned>(byteHeapSnapshot(MemoryPool::Internal).free),
+            OPTIONAL_EPUB_REBUILD_PSRAM_INTERNAL_MIN_FREE, minFree, minMaxAlloc,
+            static_cast<unsigned>(EPUB_PSRAM_RESERVE));
+    return false;
   }
 
   LOG_DBG(tag, "Skipping %s for spine %d: low heap (free=%u, maxAlloc=%u, need free>=%u maxAlloc>=%u)", action,
@@ -245,6 +275,9 @@ inline bool hasHeapForImageDecoder(const char* tag, const char* decoderName, con
   if (hasHeap(heap, minFree, decoderApproxBytes) ||
       admitsPsramWorkingSet(IMAGE_DECODER_HEADROOM, decoderApproxBytes, decoderApproxBytes)) {
     return true;
+  }
+  if (logPsramWorkingSetRejection(tag, decoderName, IMAGE_DECODER_HEADROOM, decoderApproxBytes, decoderApproxBytes)) {
+    return false;
   }
 
   LOG_ERR(tag, "Not enough heap for %s decoder (%u free, %u max alloc, need %u/%u)", decoderName, heap.freeHeap,
