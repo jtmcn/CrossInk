@@ -17,6 +17,21 @@ Integration branches only advance by merging. A change with SDK and app
 halves pairs an SDK topic (merged into `crossink`) with a CrossInk topic whose
 commit pins that merge; `bin/personal status` derives the pairing.
 
+## How the fork is maintained
+
+Personal builds come only from `personal`, never from fork `main` or the top of
+a PR stack. Fork `main` mirrors upstream exactly; `sync` fast-forwards it and
+refuses if it has diverged, so never merge anything into it.
+
+1. **Change:** branch a topic from `upstream/main` (SDK: from the upstream
+   commit `crossink` last merged), commit, then
+   `git switch personal && git merge --no-ff joel/<topic>` and push.
+2. **Ship:** `bin/personal release`; the reader picks it up via Check for updates.
+3. **Stay current:** `bin/personal sync` now and then.
+4. **Upstream it:** open the PR from the topic branch to uxjulia/CrossInk or
+   Free-Ink/freeink-sdk. Fork PRs are not part of the flow; when upstream merges,
+   `status` marks the topic retired and prints the delete command.
+
 ## Commands
 
 | Command | Does |
