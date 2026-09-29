@@ -1198,6 +1198,11 @@ void setup() {
 #endif
 #endif
 
+  if (applyPsramMallocThreshold()) {
+    LOG_INF("BOOT", "PSRAM malloc threshold set to %u bytes",
+            static_cast<unsigned>(PSRAM_MALLOC_ALWAYS_INTERNAL_BYTES));
+  }
+
   HalSystem::begin();
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
