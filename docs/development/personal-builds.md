@@ -23,7 +23,7 @@ commit pins that merge; `bin/personal status` derives the pairing.
 | --- | --- |
 | `bin/personal setup` | Verifies remotes (adding missing ones); sets `push.recurseSubmodules=check`, `diff.submodule=log`, `status.submoduleSummary=true`. |
 | `bin/personal status` | Drift, fork delta, topic pairs, and each topic's upstream-PR state with the next action. |
-| `bin/personal sync` | On `personal` clean and pushed, `crossink` with upstream SDK commit; mirrors fork `main`s, merges upstream into `crossink` then `personal`, builds x4-pro-personal/default/simulator, pushes SDK before CrossInk. Stops on conflicts or if `crossink` lacks upstream SDK commit; merge it first, then rerun. |
+| `bin/personal sync` | Requires `personal` checked out with both trees clean and no merge in progress; mirrors the fork `main`s, merges upstream into `crossink` then `personal`, repins, builds x4-pro-personal/default/simulator, then pushes the SDK before CrossInk; refuses if `crossink` lacks upstream's or `personal`'s pinned SDK commit or a local integration branch is behind its fork, and stops on conflicts (rerun after committing). |
 | `bin/personal release` | Guards (on `personal`, clean, pushed, SDK pin on `fork/crossink`, `gh` authed), builds `v<base>.<N>`, tags, publishes a GitHub release with `firmware-x4-pro.bin`. |
 | `bin/personal flash [--debug]` | USB-flashes the personal build (release version when HEAD is tagged) or `x4-pro-personal-debug` (debug build that still OTAs from the fork). Wake the reader first. |
 | `bin/personal monitor` | Serial monitor saved to `device-logs/serial-*.log`. |
@@ -51,4 +51,5 @@ Free-Ink and pin an upstream commit.
 The personal build writes `/.crosspoint/logs/log.txt` (rotated to `log.1.txt`
 at 512 KB). Each boot starts with `=== boot <version> sha=… reset=… ===`;
 watchdog, panic, and brownout resets also include the last RTC-retained lines.
-Logging pauses while USB Drive owns the card.
+Nothing is written while USB Drive owns the card, and lines logged during a
+USB Drive session are lost because leaving USB Drive restarts the reader.

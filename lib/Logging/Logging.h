@@ -42,8 +42,8 @@ inline void serviceSerialTx() {
 
 void logPrintf(const char* level, const char* origin, const char* format, ...);
 
-// Receives each formatted line after serial output. Runs on the logging task, so it
-// must not block, allocate, or touch storage.
+// Receives each formatted line after serial output. Runs on the calling task (any
+// task), so it must not block, allocate, or touch storage.
 using LogSinkFn = void (*)(const char* line, size_t len);
 void setLogSink(LogSinkFn sink);
 
