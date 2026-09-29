@@ -14,6 +14,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/FirmwareFlasher.h"
+#include "util/SdLogSink.h"
 
 void SdFirmwareUpdateActivity::onEnter() {
   Activity::onEnter();
@@ -210,6 +211,7 @@ void SdFirmwareUpdateActivity::performUpdate() {
   }
   requestUpdateAndWait();
   delay(1500);
+  SdLogSink::flushNow();
   ESP.restart();
 }
 

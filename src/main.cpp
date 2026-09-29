@@ -136,6 +136,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "util/DictionaryRegistry.h"
 #include "util/FrontlightSchedule.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SdLogSink.h"
 #include "util/SleepWakePolicy.h"
 
 GfxRenderer renderer(display);
@@ -445,6 +446,7 @@ static bool restartWithSilentToken(const uint32_t target, const uint32_t payload
 #ifdef SIMULATOR
   SimulatorLifecycle::setSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
 #endif
+  SdLogSink::flushNow();
   if (restoreUsbSerial) handoffUsbOtgToSerialJtag();
   ESP.restart();
   return true;
@@ -1276,6 +1278,7 @@ void enterDeepSleep(bool fromTimeout) {
   std::optional<RenderLock> storageSleepLock;
   if (!RenderLock::heldByCurrentTask()) storageSleepLock.emplace();
   libraryScanSleepToken.save(!library::libraryIndexNeedsRefresh());
+  SdLogSink::flushNow();
   // Flush and stop SDMMC before cutting rails or isolating the bus pads.
 #if FREEINK_DEVICE_PICCO && CROSSINK_BATTERY_DIAG_LOG
   // Preserve writes before a potentially hours-long USB hold, then leave the
@@ -1418,6 +1421,7 @@ void setup() {
 #endif
 #endif
 
+  SdLogSink::begin(static_cast<int>(rawResetReason), resetReasonName(rawResetReason));
   HalSystem::begin();
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
@@ -1597,6 +1601,7 @@ void setup() {
 #ifdef SIMULATOR
   prepareSimulatorSmokeState();
 #endif
+  SdLogSink::logWallClock();
   mirrorWakeShortPressToNvs();
   // Needs SETTINGS for the clock's UTC offset, so it cannot run any earlier.
   BatteryDiagnosticLog::record(BatteryDiagnosticLog::Event::Wake, BoardConfig::ACTIVE.name,
@@ -1984,6 +1989,9 @@ void loop() {
     if (lock.ownsLock()) slideSwitchChanged = handleSlideSwitch();
   }
 #endif
+  // Placed after the exclusive-storage early return so USB Drive never sees a write.
+  SdLogSink::service();
+
   if (!buttonShortcutController.isQuickLocked()) {
     halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.tiltPageTurnDirection, SETTINGS.orientation,
                          activityManager.isReaderActivity(), SETTINGS.tiltSensitivity);
