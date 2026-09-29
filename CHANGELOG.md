@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Changed
+
+- X4 Pro and X4 Classic read and write the SD card at 40 MHz instead of 20 MHz, so books open and chapters index faster. Cards that can't keep up fall back to 20 MHz.
+
 ## [v1.6.0] - 2026-09-21
 
 ### Added
