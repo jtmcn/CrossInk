@@ -53,6 +53,15 @@ class StatusTest(unittest.TestCase):
     def test_empty_sdk_delta_says_fork_not_needed(self):
         self.assertIn('SDK fork no longer needed', self.text())
 
+    def test_fork_delta_excludes_upstream_only_changes(self):
+        self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
+        self.fx.add_app_topic('joel/app-a', bump_sdk=True)
+        self.fx.advance_sdk_upstream('upstream-only.txt', 'x\n')
+        out = self.text()
+        self.assertIn('a.txt', out)
+        self.assertNotIn('upstream-only.txt', out)
+        self.assertNotIn('SDK fork no longer needed', out)
+
     def test_status_reports_missing_integration_branch(self):
         git(self.fx.root, 'checkout', '-q', '--detach')
         git(self.fx.root, 'branch', '-D', 'personal')

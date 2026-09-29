@@ -65,6 +65,22 @@ class DerivePairsTest(unittest.TestCase):
         self.fx.add_app_topic('joel/app-a', bump_sdk=True)
         self.assertEqual(len(topics.derive_pairs(self.p).unpaired_bumps), 1)
 
+    def test_pin_to_topic_commit_pairs_with_that_topic(self):
+        self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
+        git(self.fx.sdk, 'checkout', '-q', 'joel/sdk-a')
+        self.fx.add_app_topic('joel/app-a', bump_sdk=True)
+        pairing = topics.derive_pairs(self.p)
+        self.assertEqual(pairing.pairs, {'joel/app-a': ['joel/sdk-a']})
+        self.assertEqual(pairing.unpaired_bumps, [])
+
+    def test_pin_on_stacked_sdk_topics_pairs_with_the_lowest(self):
+        self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
+        git(self.fx.sdk, 'checkout', '-q', '-b', 'joel/sdk-b', 'joel/sdk-a')
+        self.fx.commit(self.fx.sdk, 'b.txt', 'b\n', 'sdk: b on top of a')
+        git(self.fx.sdk, 'checkout', '-q', 'joel/sdk-a')
+        self.fx.add_app_topic('joel/app-a', bump_sdk=True)
+        self.assertEqual(topics.derive_pairs(self.p).pairs, {'joel/app-a': ['joel/sdk-a']})
+
 
 if __name__ == '__main__':
     unittest.main()

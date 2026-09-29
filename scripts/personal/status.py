@@ -25,7 +25,7 @@ def repo_lines(p: Project, repo: str) -> list[str]:
         return lines
     lines.append(f'`{spec.integration}` behind upstream: '
                  f'{p.git(repo, "rev-list", "--count", f"{spec.integration}..{up}")} commit(s)')
-    delta = p.git(repo, 'diff', '--stat', up, spec.integration)
+    delta = p.git(repo, 'diff', '--stat', f'{up}...{spec.integration}')
     lines.append('fork delta:' if delta else 'fork delta: none')
     lines += _indent(delta)
     for topic in topics.local_topics(p, repo):
@@ -47,7 +47,7 @@ def sdk_pin_lines(p: Project) -> list[str]:
     tip = p.git(SDK, 'rev-parse', 'crossink', check=False)
     lines = [f'pin: matches crossink tip ({pin[:10]})' if pin == tip
              else f'pin: {pin[:10]} differs from crossink tip {tip[:10]}']
-    if not p.git(SDK, 'diff', '--stat', p.upstream_main(SDK), pin):
+    if not p.git(SDK, 'diff', '--stat', f'{p.upstream_main(SDK)}...{pin}'):
         lines.append('SDK fork no longer needed: repin to Free-Ink and restore .gitmodules')
     return lines
 

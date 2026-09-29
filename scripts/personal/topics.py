@@ -79,8 +79,20 @@ def derive_pairs(p: Project) -> Pairing:
         if not pin or p.git_ok(SDK, 'merge-base', '--is-ancestor', pin, p.upstream_main(SDK)):
             continue
         match = MERGE_SUBJECT.match(p.git(SDK, 'log', '-1', '--format=%s', pin, check=False))
-        if match is None:
+        sdk_topic = match.group(1) if match else _lowest_sdk_topic_containing(p, pin)
+        if sdk_topic is None:
             pairing.unpaired_bumps.append(commit)
-        elif match.group(1) not in pairing.pairs[topic]:
-            pairing.pairs[topic].append(match.group(1))
+        elif sdk_topic not in pairing.pairs[topic]:
+            pairing.pairs[topic].append(sdk_topic)
     return pairing
+
+
+def _lowest_sdk_topic_containing(p: Project, pin: str):
+    # Early bumps may pin a topic commit directly, before its crossink merge existed.
+    out = p.git(SDK, 'branch', '--format=%(refname:short)', '--contains', pin, '--list', f'{TOPIC_PREFIX}*',
+                check=False)
+    candidates = [t for t in out.splitlines() if t]
+    if not candidates:
+        return None
+    upstream = p.upstream_main(SDK)
+    return min(candidates, key=lambda t: int(p.git(SDK, 'rev-list', '--count', f'{upstream}..{t}')))
