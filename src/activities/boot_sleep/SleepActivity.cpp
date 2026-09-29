@@ -11,6 +11,8 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <PNGdec.h>
+// PNGdec's zutil.h defines `local` as `static`, which breaks FreeInkUI's catalog.h locals.
+#undef local
 #include <Xtc.h>
 
 #include <algorithm>
