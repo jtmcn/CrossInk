@@ -43,8 +43,11 @@ the latest release, because debug builds report `<base>.0`.
 
 `status` marks a topic **retired** once its upstream PR is merged and the
 integration branch contains that merge. Delete the branch with the printed
-command. When the SDK fork delta is empty, point `.gitmodules` back at
-Free-Ink and pin an upstream commit.
+command. A topic is **superseded** when upstream delivers the same effect another
+way (its PR usually shows as closed, and a sync conflict where you keep
+upstream's side is the cue); only you can declare that, so delete it by hand.
+When the SDK fork delta is empty, point `.gitmodules` back at Free-Ink and pin
+an upstream commit.
 
 ## SD logs
 
