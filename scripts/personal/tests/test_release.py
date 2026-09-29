@@ -1,4 +1,6 @@
+import gzip
 import unittest
+from pathlib import Path
 
 from personal import release
 from personal.proc import PersonalError, Result
@@ -59,6 +61,9 @@ class ReleaseTest(unittest.TestCase):
         self.assertNotIn('--prerelease', create)
         self.assertNotIn('--draft', create)
         self.assertIn('jtmcn/CrossInk', create)
+        elf = [a for a in create if a.endswith('firmware-x4-pro-v1.6.0.1.elf.gz')]
+        self.assertEqual(len(elf), 1)
+        self.assertEqual(gzip.decompress(Path(elf[0]).read_bytes()), b'\x7fELF symbols')
         self.assertEqual(release.release(self.p, out=lambda *_: None), 'v1.6.0.2')
 
     def test_release_counts_tags_only_on_fork(self):

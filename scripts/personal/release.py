@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import shlex
+import shutil
 import tempfile
+from pathlib import Path
 
 from . import versioning
 from .proc import PersonalError
@@ -58,6 +61,14 @@ def release_notes(p: Project, pin: str, previous_tag) -> str:
     ])
 
 
+def compress_elf(elf: Path, tag: str) -> Path:
+    # Ship symbols with each release so crash_report.txt backtraces can be decoded later.
+    target = elf.with_name(f'firmware-x4-pro-{tag}.elf.gz')
+    with elf.open('rb') as src, gzip.open(target, 'wb') as dst:
+        shutil.copyfileobj(src, dst)
+    return target
+
+
 def release(p: Project, out=print) -> str:
     for warning in check_guards(p):
         out(f'warning: {warning}')
@@ -75,12 +86,15 @@ def release(p: Project, out=print) -> str:
                  env={'CROSSINK_PERSONAL_VERSION': f'{base}.{n}'}, stream=True)
     artifact = p.root / ARTIFACT
     _require(artifact.is_file(), f'build finished but {ARTIFACT} is missing')
+    elf = artifact.with_name('firmware.elf')
+    _require(elf.is_file(), f'build finished but {elf.relative_to(p.root)} is missing')
+    symbols = compress_elf(elf, tag)
 
     p.git(APP, 'tag', tag)
     p.git(APP, 'push', '--quiet', app.fork_remote, tag)
     with tempfile.NamedTemporaryFile('w', prefix='personal-notes-', suffix='.md', delete=False) as notes:
         notes.write(release_notes(p, pin, previous))
-    command = ['gh', 'release', 'create', tag, str(artifact), '--repo', app.fork_slug,
+    command = ['gh', 'release', 'create', tag, str(artifact), str(symbols), '--repo', app.fork_slug,
                '--title', tag, '--notes-file', notes.name, '--latest']
     result = p.runner.run(command, check=False)
     if result.returncode != 0:
