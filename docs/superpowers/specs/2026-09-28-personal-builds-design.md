@@ -147,8 +147,8 @@ command operates on both repos; there is no separate SDK command namespace.
   selection: `/dev/cu.usbmodem*` only, never Bluetooth; exactly one match is
   used, several prompt, none prints "wake the reader (deep sleep disables
   USB) and retry".
-- `monitor` — `pio device monitor` on the same port selection with the
-  `time` and `log2file` filters, output under `device-logs/serial-<ts>.log`.
+- `monitor` — `pio device monitor -f time` on the same port selection,
+  recorded with `script` to `device-logs/serial-<ts>.log`.
 - `logs` — copy SD logs from a mounted USB Drive volume (Section 2).
 
 `device-logs/` is added to `.gitignore`.
@@ -273,7 +273,7 @@ Split into a storage-free core (host-testable) and a thin SD writer:
   is not justified for a diagnostic feature on a PSRAM device.
 - Append: short `portMUX` critical section around the index update and
   `memcpy`; no allocation, no logging, no I/O.
-- Flush policy (`SdLogSink::service()`, called each `loop()` iteration):
+- Flush policy (`SdLogSink::service()`, called each `loop()` iteration after the exclusive-storage early return):
   flush when an `ERR` is pending, the buffer is ≥ 50 % full, or the oldest
   unflushed line is ≥ 10 s old. Never flush while
   `activityManager.requiresExclusiveStorageLoop()` is true (USB Drive, serial
@@ -289,9 +289,10 @@ Split into a storage-free core (host-testable) and a thin SD writer:
 
 ### Boot banner and hang recovery
 
-At init (after `Storage.begin()`), queue:
+At `begin()` (before `HalSystem::begin()`), queue:
 
-- `=== boot <version> sha=<CROSSINK_GIT_SHA><dirty?> reset=<reason> time=<RTC time or "unset"> ===`
+- `=== boot <version> sha=<CROSSINK_GIT_SHA> dirty=<0|1> reset=<reason> ===`,
+  followed after settings load by a `clock <local time>` (or `clock unset`) line
 - If the reset reason is task/interrupt watchdog, panic, or brownout, the
   RTC ring contents from `getLastLogs()` under a `--- last lines before
   reset ---` header. This makes hangs diagnosable: the watchdog resets the
@@ -300,15 +301,15 @@ At init (after `Storage.begin()`), queue:
 Worst-case loss on abrupt reset: < 10 s of lines, mostly recovered from the
 RTC ring.
 
-### `main.cpp` call sites (all `#ifdef CROSSINK_SD_LOG`)
+### `main.cpp` call sites (unconditional; `SdLogSink.h` supplies inline no-ops without `CROSSINK_SD_LOG`)
 
-1. `SdLogSink::init()` after storage is mounted in `setup()`.
-2. `SdLogSink::service()` in `loop()`.
+1. `SdLogSink::begin()` before `HalSystem::begin()` in `setup()` (that call clears the
+   RTC ring on non-panic boots); flushes wait for `Storage.ready()`.
+2. `SdLogSink::service()` in `loop()`, after the exclusive-storage early return.
 3. `SdLogSink::flushNow()` in `enterDeepSleep()` before sleep teardown.
 4. `SdLogSink::flushNow()` before each intentional `ESP.restart()`:
    `silentRestart()` (`src/main.cpp`), `OtaUpdateActivity` success, and
-   `SdFirmwareUpdateActivity` success. The two activity sites include a
-   small `SdLogSink.h` guarded by `CROSSINK_SD_LOG`.
+   `SdFirmwareUpdateActivity` success.
 
 ### Verbosity
 
