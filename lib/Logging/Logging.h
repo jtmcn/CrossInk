@@ -33,6 +33,11 @@ static auto& logSerial = BoardConfig::serialTransport();
 
 void logPrintf(const char* level, const char* origin, const char* format, ...);
 
+// Receives each formatted line after serial output. Runs on the logging task, so it
+// must not block, allocate, or touch storage.
+using LogSinkFn = void (*)(const char* line, size_t len);
+void setLogSink(LogSinkFn sink);
+
 #ifdef ENABLE_SERIAL_LOG
 #if LOG_LEVEL >= 0
 #define LOG_ERR(origin, format, ...) logPrintf("ERR", origin, format "\n", ##__VA_ARGS__)
