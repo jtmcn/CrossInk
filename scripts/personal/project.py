@@ -12,7 +12,7 @@ SDK = 'sdk'
 SDK_PATH = 'freeink-sdk'
 TOPIC_PREFIX = 'joel/'
 PERSONAL_ENV = 'x4-pro-personal'
-DEBUG_ENV = 'x4-pro-debug'
+DEBUG_ENV = 'x4-pro-personal-debug'
 SYNC_BUILD_ENVS = (PERSONAL_ENV, 'default', 'simulator')
 ARTIFACT = Path('.pio') / 'build' / PERSONAL_ENV / 'firmware-x4-pro.bin'
 

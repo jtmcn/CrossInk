@@ -25,7 +25,7 @@ commit pins that merge; `bin/personal status` derives the pairing.
 | `bin/personal status` | Drift, fork delta, topic pairs, and each topic's upstream-PR state with the next action. |
 | `bin/personal sync` | On `personal` clean and pushed, `crossink` with upstream SDK commit; mirrors fork `main`s, merges upstream into `crossink` then `personal`, builds x4-pro-personal/default/simulator, pushes SDK before CrossInk. Stops on conflicts or if `crossink` lacks upstream SDK commit; merge it first, then rerun. |
 | `bin/personal release` | Guards (on `personal`, clean, pushed, SDK pin on `fork/crossink`, `gh` authed), builds `v<base>.<N>`, tags, publishes a GitHub release with `firmware-x4-pro.bin`. |
-| `bin/personal flash [--debug]` | USB-flashes the personal build (release version when HEAD is tagged) or `x4-pro-debug`. Wake the reader first. |
+| `bin/personal flash [--debug]` | USB-flashes the personal build (release version when HEAD is tagged) or `x4-pro-personal-debug` (debug build that still OTAs from the fork). Wake the reader first. |
 | `bin/personal monitor` | Serial monitor saved to `device-logs/serial-*.log`. |
 | `bin/personal logs` | With the reader in USB Drive mode, copies `.crosspoint/logs/*` and `crash_report.txt` into `device-logs/<timestamp>/`. |
 

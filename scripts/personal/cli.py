@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser('sync', help='merge both upstreams, build, then push')
     sub.add_parser('release', help='build and publish the next OTA release')
     flash = sub.add_parser('flash', help='USB-flash the personal (or debug) build')
-    flash.add_argument('--debug', action='store_true', help='flash x4-pro-debug instead')
+    flash.add_argument('--debug', action='store_true', help='flash x4-pro-personal-debug instead')
     sub.add_parser('monitor', help='serial monitor, saved under device-logs/')
     sub.add_parser('logs', help='copy SD logs from a mounted USB Drive volume')
     return parser
