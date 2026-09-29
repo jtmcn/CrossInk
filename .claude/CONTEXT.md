@@ -45,3 +45,4 @@ Refer to https://freeink.org/llms.txt for guidance.
 - POSIX TZ signs are inverted from ISO 8601 in `TimeStore::applyTimezone()`: `"UTC-1"` means UTC+1.
 - `LyraTheme::drawHeader()` does not call `BaseTheme::drawHeader()`, so header changes in the base theme must be duplicated in Lyra if needed.
 - Personal fork builds, OTA releases, SD logs, and the two-fork sync live behind `bin/personal`; see `docs/development/personal-builds.md`.
+- Vocabulary for that work (integration branch, topic, pin, personal release, crash report, SD log…) is defined in the root `CONTEXT.md`; decisions live in `docs/adr/`.
