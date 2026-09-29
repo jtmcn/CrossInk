@@ -79,6 +79,28 @@ class SyncTest(unittest.TestCase):
             sync.sync(self.p, out=quiet)
         self.assertIn('sync runs on `personal`', str(ctx.exception))
 
+    def orphan_sdk_commit(self):
+        # Commit crossink lacks, present in the SDK object store.
+        return git(self.fx.sdk, 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'unmerged sdk change')
+
+    def assert_refused_untouched(self):
+        before = self.fork_refs()
+        with self.assertRaises(PersonalError) as ctx:
+            sync.sync(self.p, out=quiet)
+        self.assertIn('does not contain', str(ctx.exception))
+        self.assertEqual(self.fork_refs(), before)
+        self.assertEqual(self.tools.tool_calls('pio'), [])
+
+    def test_sync_refuses_uncontained_pin_on_gitlink_conflict(self):
+        self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
+        self.fx.add_app_topic('joel/app-a', bump_sdk=True)
+        self.fx.advance_app_upstream('app-up.txt', 'x\n', pin_sdk=self.orphan_sdk_commit())
+        self.assert_refused_untouched()
+
+    def test_sync_refuses_uncontained_pin_on_clean_merge(self):
+        self.fx.advance_app_upstream('app-up.txt', 'x\n', pin_sdk=self.orphan_sdk_commit())
+        self.assert_refused_untouched()
+
 
 if __name__ == '__main__':
     unittest.main()
