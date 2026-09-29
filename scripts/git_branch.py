@@ -175,6 +175,12 @@ def inject_download_endpoints(env):
         env.Append(CPPDEFINES=[(define, '\\\"' + base + '\\\"')])
 
 
+def get_personal_version(project_dir):
+    # Local builds are build 0 so they never outrank a published personal release.
+    version = os.environ.get('CROSSINK_PERSONAL_VERSION') or f'{get_crossink_version(project_dir)}.0'
+    return f'{sanitize_version_component(version)}-x4-pro'
+
+
 def inject_version(env):
     inject_download_endpoints(env)
     project_dir = env['PROJECT_DIR']
@@ -209,6 +215,11 @@ def inject_version(env):
         else:
             print(f'CrossInk build version: {version_string}')
         scoped.append(('CROSSINK_VERSION', f'\\"{version_string}\\"'))
+
+    elif pioenv == 'x4-pro-personal':
+        version_string = get_personal_version(project_dir)
+        scoped.append(('CROSSINK_VERSION', f'\\"{version_string}\\"'))
+        print(f'CrossInk personal build version: {version_string}')
 
     elif pioenv == 'debug':
         branch = get_git_branch(project_dir)
