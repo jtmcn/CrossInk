@@ -26,7 +26,7 @@ ACTIONS = {
     State.PR_OPEN: 'wait for review',
     State.MERGED_UNSYNCED: 'run `bin/personal sync`',
     State.RETIRED: 'delete the topic branch',
-    State.CLOSED: 'rework, or keep as fork-only',
+    State.CLOSED: 'rework, keep as fork-only, or delete if superseded upstream',
 }
 
 
