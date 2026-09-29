@@ -67,7 +67,7 @@ def topic_lines(p: Project) -> list[str]:
             pair_text = f'<-> {pair}' if pair else ''
             lines.append(f'{spec.name:<12}{topic:<40}{state.value:<30}{pair_text:<44}{topics.ACTIONS[state]}')
             if state is topics.State.RETIRED:
-                lines.append(f'    git -C {p.path(repo)} branch -d {topic} && '
+                lines.append(f'    git -C {p.path(repo)} branch -D {topic} && '
                              f'git -C {p.path(repo)} push {spec.fork_remote} --delete {topic}')
     for commit in pairing.unpaired_bumps:
         lines.append(f'unpaired gitlink bump {commit[:10]}: pinned SDK commit is not a crossink topic merge')

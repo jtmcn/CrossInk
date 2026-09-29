@@ -106,4 +106,7 @@ def sync(p: Project, out=print) -> None:
     p.git(SDK, 'push', '--quiet', sdk.fork_remote, sdk.integration)
     p.git(APP, 'push', '--quiet', app.fork_remote, app.integration)
     from . import status
-    status.status(p, out=out)
+    try:
+        status.status(p, out=out)
+    except PersonalError as error:
+        out(f'warning: sync succeeded, but status failed: {error}')
