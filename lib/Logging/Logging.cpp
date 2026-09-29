@@ -44,6 +44,10 @@ void addToLogRingBuffer(const char* message) {
   logHead = (logHead + 1) % MAX_LOG_LINES;
 }
 
+static LogSinkFn logSink = nullptr;
+
+void setLogSink(LogSinkFn sink) { logSink = sink; }
+
 // Since logging can take a large amount of flash, we want to make the format string as short as possible.
 // This logPrintf prepend the timestamp, level and origin to the user-provided message, so that the user only needs to
 // provide the format string for the message itself.
@@ -86,6 +90,9 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   }
 #endif
   addToLogRingBuffer(buf);
+  if (logSink) {
+    logSink(buf, strnlen(buf, MAX_ENTRY_LEN));
+  }
 }
 
 std::string getLastLogs() {

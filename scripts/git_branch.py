@@ -160,6 +160,12 @@ def get_hardware_version(project_dir, pioenv):
     return f'{base_version}{device_suffix}'
 
 
+def get_personal_version(project_dir):
+    # Local builds are build 0 so they never outrank a published personal release.
+    version = os.environ.get('CROSSINK_PERSONAL_VERSION') or f'{get_crossink_version(project_dir)}.0'
+    return f'{sanitize_version_component(version)}-x4-pro'
+
+
 def inject_version(env):
     project_dir = env['PROJECT_DIR']
     pioenv = env['PIOENV']
@@ -180,6 +186,11 @@ def inject_version(env):
         else:
             print(f'CrossInk build version: {version_string}')
         env.Append(CPPDEFINES=[('CROSSINK_VERSION', f'\\"{version_string}\\"')])
+
+    elif pioenv == 'x4-pro-personal':
+        version_string = get_personal_version(project_dir)
+        env.Append(CPPDEFINES=[('CROSSINK_VERSION', f'\\"{version_string}\\"')])
+        print(f'CrossInk personal build version: {version_string}')
 
     elif pioenv == 'debug':
         branch = get_git_branch(project_dir)
@@ -205,7 +216,7 @@ def inject_version(env):
         ])
         print(f'CrossInk test build version: {ci_version}{suffix}')
 
-    elif pioenv in {'x4-pro-debug', 'x4-classic-debug'}:
+    elif pioenv in {'x4-pro-debug', 'x4-pro-personal-debug', 'x4-classic-debug'}:
         branch = get_git_branch(project_dir)
         short_hash = get_git_short_hash(project_dir)
         ci_version = get_crossink_version(project_dir)

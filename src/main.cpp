@@ -118,6 +118,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "util/DictionaryRegistry.h"
 #include "util/FrontlightSchedule.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SdLogSink.h"
 #include "util/SleepWakePolicy.h"
 
 GfxRenderer renderer(display);
@@ -364,6 +365,7 @@ static void restartWithSilentToken() {
 #ifdef SIMULATOR
   SimulatorLifecycle::setSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
 #endif
+  SdLogSink::flushNow();
   ESP.restart();
 }
 
@@ -1098,6 +1100,7 @@ void enterDeepSleep(bool fromTimeout) {
   BatteryDiagnosticLog::record(BatteryDiagnosticLog::Event::Sleep, BoardConfig::ACTIVE.name);
   // All sleep-time file writes are complete. Stop SDMMC before the power path
   // cuts peripheral rails and isolates the bus pads; SPI boards are a no-op.
+  SdLogSink::flushNow();
   Storage.shutdown();
 
   putTiltSensorToSleepForDeepSleep();
@@ -1198,6 +1201,8 @@ void setup() {
 #endif
 #endif
 
+  // Before any LOG_* call: copies the RTC ring tail before new lines displace it.
+  SdLogSink::begin(static_cast<int>(rawResetReason), resetReasonName(rawResetReason));
   if (applyPsramMallocThreshold()) {
     LOG_INF("BOOT", "PSRAM malloc threshold set to %u bytes",
             static_cast<unsigned>(PSRAM_MALLOC_ALWAYS_INTERNAL_BYTES));
@@ -1318,6 +1323,7 @@ void setup() {
   SETTINGS.loadFromFile();
   Storage.installDateTimeCallback(&SETTINGS.clockUtcOffsetQ);
   APP_STATE.loadFromFile();
+  SdLogSink::logWallClock();
   mirrorWakeShortPressToNvs();
   // Needs SETTINGS for the clock's UTC offset, so it cannot run any earlier.
   BatteryDiagnosticLog::record(BatteryDiagnosticLog::Event::Wake, BoardConfig::ACTIVE.name,
@@ -1600,6 +1606,9 @@ void loop() {
     }
     return;
   }
+
+  // Placed after the exclusive-storage early return so USB Drive never sees a write.
+  SdLogSink::service();
 
   if (!buttonShortcutController.isQuickLocked()) {
     halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.tiltPageTurnDirection, SETTINGS.orientation,
