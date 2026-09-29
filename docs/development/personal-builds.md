@@ -21,9 +21,9 @@ commit pins that merge; `bin/personal status` derives the pairing.
 
 | Command | Does |
 | --- | --- |
-| `bin/personal setup` | Verifies remotes; sets `push.recurseSubmodules=check`, `diff.submodule=log`, `status.submoduleSummary=true`. |
+| `bin/personal setup` | Verifies remotes (adding missing ones); sets `push.recurseSubmodules=check`, `diff.submodule=log`, `status.submoduleSummary=true`. |
 | `bin/personal status` | Drift, fork delta, topic pairs, and each topic's upstream-PR state with the next action. |
-| `bin/personal sync` | Mirrors both fork `main`s, merges upstream into `crossink` then `personal`, repins the SDK, builds `x4-pro-personal`/`default`/`simulator`, then pushes SDK before CrossInk. Stops on conflicts; rerun after committing the resolution. |
+| `bin/personal sync` | On `personal` clean and pushed, `crossink` with upstream SDK commit; mirrors fork `main`s, merges upstream into `crossink` then `personal`, builds x4-pro-personal/default/simulator, pushes SDK before CrossInk. Stops on conflicts or if `crossink` lacks upstream SDK commit; merge it first, then rerun. |
 | `bin/personal release` | Guards (on `personal`, clean, pushed, SDK pin on `fork/crossink`, `gh` authed), builds `v<base>.<N>`, tags, publishes a GitHub release with `firmware-x4-pro.bin`. |
 | `bin/personal flash [--debug]` | USB-flashes the personal build (release version when HEAD is tagged) or `x4-pro-debug`. Wake the reader first. |
 | `bin/personal monitor` | Serial monitor saved to `device-logs/serial-*.log`. |
