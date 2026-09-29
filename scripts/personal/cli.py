@@ -31,6 +31,15 @@ def dispatch(project: Project, args) -> None:
         from . import release
         release.release(project)
         return
+    if args.command in ('flash', 'monitor', 'logs'):
+        from . import device
+        if args.command == 'flash':
+            device.flash(project, debug=args.debug)
+        elif args.command == 'monitor':
+            device.monitor(project)
+        else:
+            device.pull_logs(project)
+        return
     raise PersonalError(f'`{args.command}` is not implemented yet')
 
 
