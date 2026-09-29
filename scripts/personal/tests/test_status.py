@@ -37,7 +37,7 @@ class StatusTest(unittest.TestCase):
             Result(0, json.dumps(pr))
         out = self.text()
         self.assertIn('retired', out)
-        self.assertIn('branch -d joel/sdk-a', out)
+        self.assertIn('branch -D joel/sdk-a', out)
 
     def test_fork_main_drift_is_flagged(self):
         self.fx.advance_sdk_upstream('up.txt', 'x\n')
