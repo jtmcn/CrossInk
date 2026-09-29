@@ -41,6 +41,7 @@ class ToolFake(Runner):
             if not failed and self.artifact is not None:
                 self.artifact.parent.mkdir(parents=True, exist_ok=True)
                 self.artifact.write_bytes(b'firmware')
+                (self.artifact.parent / 'firmware.elf').write_bytes(b'\x7fELF symbols')
             result = Result(1 if failed else 0)
         elif argv[0] == 'gh':
             self.calls.append({'argv': argv, 'env': env})
