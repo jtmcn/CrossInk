@@ -40,6 +40,10 @@ def dispatch(project: Project, args) -> None:
         else:
             device.pull_logs(project)
         return
+    if args.command == 'status':
+        from . import status
+        status.status(project)
+        return
     raise PersonalError(f'`{args.command}` is not implemented yet')
 
 
