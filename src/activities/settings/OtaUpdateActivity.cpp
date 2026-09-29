@@ -15,6 +15,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
+#include "util/SdLogSink.h"
 
 namespace {
 bool hasActiveWifiConnection() { return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0); }
@@ -302,6 +303,7 @@ void OtaUpdateActivity::loop() {
   }
 
   if (state == SHUTTING_DOWN) {
+    SdLogSink::flushNow();
     ESP.restart();
   }
 }
