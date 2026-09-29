@@ -216,7 +216,7 @@ def inject_version(env):
         ])
         print(f'CrossInk test build version: {ci_version}{suffix}')
 
-    elif pioenv in {'x4-pro-debug', 'x4-classic-debug'}:
+    elif pioenv in {'x4-pro-debug', 'x4-pro-personal-debug', 'x4-classic-debug'}:
         branch = get_git_branch(project_dir)
         short_hash = get_git_short_hash(project_dir)
         ci_version = get_crossink_version(project_dir)

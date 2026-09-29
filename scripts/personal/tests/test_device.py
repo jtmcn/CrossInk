@@ -54,7 +54,7 @@ class FlashTest(unittest.TestCase):
 
     def test_debug_flashes_debug_env(self):
         device.flash(self.p, debug=True, ports=['/dev/cu.usbmodem1'])
-        self.assertIn('x4-pro-debug', self.pio_call()['argv'])
+        self.assertIn('x4-pro-personal-debug', self.pio_call()['argv'])
 
 
 class MonitorCommandTest(unittest.TestCase):
