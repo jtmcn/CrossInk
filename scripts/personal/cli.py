@@ -62,4 +62,6 @@ def main(argv=None) -> int:
     except PersonalError as error:
         print(f'error: {error}', file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        return 130
     return 0
