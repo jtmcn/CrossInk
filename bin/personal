@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Entry point for personal fork builds; see docs/development/personal-builds.md.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec env PYTHONPATH="$ROOT/scripts${PYTHONPATH:+:$PYTHONPATH}" python3 -m personal "$@"
