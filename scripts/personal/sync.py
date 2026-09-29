@@ -23,12 +23,14 @@ def _require_clean(p: Project) -> None:
         raise PersonalError(f'{SDK_PATH} has uncommitted changes:\n{sdk_dirty}')
 
 
-def _resolve_gitlink_conflict(p: Project) -> None:
-    theirs = p.git(APP, 'rev-parse', f'MERGE_HEAD:{SDK_PATH}')
-    ours = p.git(SDK, 'rev-parse', 'HEAD')
-    if not p.git_ok(SDK, 'merge-base', '--is-ancestor', theirs, ours):
+def _require_sdk_has_pin(p: Project, theirs: str) -> None:
+    if theirs and not p.git_ok(SDK, 'merge-base', '--is-ancestor', theirs, 'HEAD'):
         raise PersonalError(f'upstream CrossInk pins SDK {theirs[:10]}, which `crossink` does not contain; '
-                            f'merge it into crossink, then `git add {SDK_PATH} && git commit` and rerun sync')
+                            f'merge it into crossink, then `git add {SDK_PATH} && git commit` and rerun `bin/personal sync`')
+
+
+def _resolve_gitlink_conflict(p: Project) -> None:
+    _require_sdk_has_pin(p, p.git(APP, 'rev-parse', f'MERGE_HEAD:{SDK_PATH}'))
     p.git(APP, 'add', SDK_PATH)
     p.git(APP, 'commit', '--quiet', '--no-edit')
 
@@ -69,6 +71,8 @@ def sync(p: Project, out=print) -> None:
             p.git(SDK, 'checkout', '--quiet', sdk.integration)
         _merge_upstream(p, repo, out)
 
+    # Covers clean merges and hand-resolved conflicts, which the conflict path alone would miss.
+    _require_sdk_has_pin(p, p.pinned_sdk(p.upstream_main(APP)))
     tip = p.git(SDK, 'rev-parse', 'HEAD')
     if p.pinned_sdk() != tip:
         p.git(APP, 'add', SDK_PATH)
