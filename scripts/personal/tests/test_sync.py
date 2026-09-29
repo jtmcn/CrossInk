@@ -104,3 +104,41 @@ class SyncTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SyncStaleBranchTest(unittest.TestCase):
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.cleanup)
+        self.tools = ToolFake()
+        self.p = Project(self.fx.root, self.tools)
+
+    def assert_refused(self, fragment):
+        before = (self.fx.remote_sha(self.fx.sdk_fork, 'crossink'), self.fx.remote_sha(self.fx.app_fork, 'personal'),
+                  self.fx.remote_sha(self.fx.sdk_fork, 'main'), self.fx.remote_sha(self.fx.app_fork, 'main'))
+        self.fx.advance_sdk_upstream('up.txt', 'x\n')
+        with self.assertRaises(PersonalError) as ctx:
+            sync.sync(self.p, out=quiet)
+        self.assertIn(fragment, str(ctx.exception))
+        after = (self.fx.remote_sha(self.fx.sdk_fork, 'crossink'), self.fx.remote_sha(self.fx.app_fork, 'personal'),
+                 self.fx.remote_sha(self.fx.sdk_fork, 'main'), self.fx.remote_sha(self.fx.app_fork, 'main'))
+        self.assertEqual(after, before)
+        self.assertEqual(self.tools.tool_calls('pio'), [])
+
+    def test_refuses_when_personal_pin_missing_from_crossink(self):
+        sdk = self.fx.sdk
+        git(sdk, 'checkout', '-q', '--detach', 'crossink')
+        self.fx.commit(sdk, 'local.txt', 'x\n', 'sdk: unmerged local work')
+        git(self.fx.root, 'add', 'freeink-sdk')
+        git(self.fx.root, 'commit', '-q', '-m', 'chore: pin unmerged sdk work')
+        self.assert_refused('personal pins SDK')
+
+    def test_refuses_when_local_crossink_behind_fork(self):
+        self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
+        git(self.fx.sdk, 'reset', '-q', '--hard', 'HEAD~1')
+        self.assert_refused('fork/crossink')
+
+    def test_refuses_when_local_personal_behind_origin(self):
+        self.fx.add_app_topic('joel/app-a')
+        git(self.fx.root, 'reset', '-q', '--hard', 'HEAD~1')
+        self.assert_refused('origin/personal')

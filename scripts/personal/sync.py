@@ -29,6 +29,23 @@ def _require_sdk_has_pin(p: Project, theirs: str) -> None:
                             f'merge it into crossink, then `git add {SDK_PATH} && git commit` and rerun `bin/personal sync`')
 
 
+def _require_not_stale(p: Project) -> None:
+    """Refuse before any push/merge when re-pinning could drop SDK or fork commits."""
+    sdk, app = p.spec(SDK), p.spec(APP)
+    pin = p.pinned_sdk()
+    if pin and not p.git_ok(SDK, 'merge-base', '--is-ancestor', pin, sdk.integration):
+        raise PersonalError(f'{app.integration} pins SDK {pin[:10]}, which local `{sdk.integration}` does not contain; '
+                            f'merge that SDK work into `{sdk.integration}` first, then rerun `bin/personal sync`')
+    for repo in (SDK, APP):
+        spec = p.spec(repo)
+        remote = f'{spec.fork_remote}/{spec.integration}'
+        if not p.git_ok(repo, 'rev-parse', '--verify', '--quiet', f'refs/remotes/{remote}'):
+            continue
+        if not p.git_ok(repo, 'merge-base', '--is-ancestor', remote, spec.integration):
+            raise PersonalError(f'local `{spec.integration}` in {p.path(repo)} does not contain {remote}; '
+                                f'pull or merge {remote} into `{spec.integration}`, then rerun `bin/personal sync`')
+
+
 def _resolve_gitlink_conflict(p: Project) -> None:
     _require_sdk_has_pin(p, p.git(APP, 'rev-parse', f'MERGE_HEAD:{SDK_PATH}'))
     p.git(APP, 'add', SDK_PATH)
@@ -65,6 +82,10 @@ def sync(p: Project, out=print) -> None:
         spec = p.spec(repo)
         p.git(repo, 'fetch', '--quiet', spec.upstream_remote)
         p.git(repo, 'fetch', '--quiet', spec.fork_remote)
+    _require_not_stale(p)
+
+    for repo in (SDK, APP):
+        spec = p.spec(repo)
         # Fast-forward only: a diverged fork main fails here instead of being overwritten.
         p.git(repo, 'push', '--quiet', spec.fork_remote, f'{p.upstream_main(repo)}:refs/heads/main')
         if repo == SDK:
