@@ -27,6 +27,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def dispatch(project: Project, args) -> None:
+    if args.command == 'release':
+        from . import release
+        release.release(project)
+        return
     raise PersonalError(f'`{args.command}` is not implemented yet')
 
 
