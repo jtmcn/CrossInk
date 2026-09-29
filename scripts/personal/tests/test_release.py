@@ -79,9 +79,12 @@ class ReleaseTest(unittest.TestCase):
     def test_notes_include_merges_and_sdk_delta(self):
         self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
         self.fx.add_app_topic('joel/app-a', bump_sdk=True)
+        self.fx.advance_sdk_upstream('upstream-only.txt', 'x\n')
+        git(self.fx.sdk, 'fetch', '-q', 'origin')
         notes = release.release_notes(self.p, self.p.pinned_sdk(), None)
         self.assertIn("Merge branch 'joel/app-a' into personal", notes)
         self.assertIn('a.txt', notes)
+        self.assertNotIn('upstream-only.txt', notes)
 
 
 if __name__ == '__main__':

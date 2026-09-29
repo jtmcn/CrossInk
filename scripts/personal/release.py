@@ -51,7 +51,7 @@ def check_guards(p: Project) -> list[str]:
 def release_notes(p: Project, pin: str, previous_tag) -> str:
     span = [f'{previous_tag}..HEAD'] if previous_tag else ['-n', '30', 'HEAD']
     merges = p.git(APP, 'log', '--merges', '--first-parent', '--format=- %s', *span)
-    delta = p.git(SDK, 'diff', '--stat', p.upstream_main(SDK), pin)
+    delta = p.git(SDK, 'diff', '--stat', f'{p.upstream_main(SDK)}...{pin}')
     return '\n'.join([
         '## CrossInk merges', merges or '- (none since the previous release)', '',
         f'## freeink-sdk `{pin[:10]}` fork delta vs upstream', '```', delta or '(none)', '```', '',
