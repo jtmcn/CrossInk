@@ -243,3 +243,4 @@ add_subdirectory(xtc_parser)
 
 add_test(NAME EegoPanelIdleRegression
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/scripts/test_eego_panel_idle.py)
+add_subdirectory(sd_log_sink)
