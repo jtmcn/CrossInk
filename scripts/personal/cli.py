@@ -44,6 +44,10 @@ def dispatch(project: Project, args) -> None:
         from . import status
         status.status(project)
         return
+    if args.command == 'sync':
+        from . import sync
+        sync.sync(project)
+        return
     raise PersonalError(f'`{args.command}` is not implemented yet')
 
 
