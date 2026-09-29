@@ -24,7 +24,7 @@ commit pins that merge; `bin/personal status` derives the pairing.
 | `bin/personal setup` | Verifies remotes (adding missing ones); sets `push.recurseSubmodules=check`, `diff.submodule=log`, `status.submoduleSummary=true`. |
 | `bin/personal status` | Drift, fork delta, topic pairs, and each topic's upstream-PR state with the next action. |
 | `bin/personal sync` | Requires `personal` checked out with both trees clean and no merge in progress; mirrors the fork `main`s, merges upstream into `crossink` then `personal`, repins, builds x4-pro-personal/default/simulator, then pushes the SDK before CrossInk; refuses if `crossink` lacks upstream's or `personal`'s pinned SDK commit or a local integration branch is behind its fork, and stops on conflicts (rerun after committing). |
-| `bin/personal release` | Guards (on `personal`, clean, pushed, SDK pin on `fork/crossink`, `gh` authed), builds `v<base>.<N>`, tags, publishes a GitHub release with `firmware-x4-pro.bin`. |
+| `bin/personal release` | Guards (on `personal`, clean, pushed, SDK pin on `fork/crossink`, `gh` authed), builds `v<base>.<N>`, tags, publishes a GitHub release with `firmware-x4-pro.bin` and its symbols as `firmware-x4-pro-<tag>.elf.gz`. |
 | `bin/personal flash [--debug]` | USB-flashes the personal build (release version when HEAD is tagged) or `x4-pro-personal-debug` (debug build that still OTAs from the fork). Wake the reader first. |
 | `bin/personal monitor` | Serial monitor saved to `device-logs/serial-*.log`. |
 | `bin/personal logs` | With the reader in USB Drive mode, copies `.crosspoint/logs/*` and `crash_report.txt` into `device-logs/<timestamp>/`. |
@@ -53,3 +53,17 @@ at 512 KB). Each boot starts with `=== boot <version> sha=… reset=… ===`;
 watchdog, panic, and brownout resets also include the last RTC-retained lines.
 Nothing is written while USB Drive owns the card, and lines logged during a
 USB Drive session are lost because leaving USB Drive restarts the reader.
+
+## Decoding a crash
+
+After a panic the reader writes `/crash_report.txt` with a backtrace. Match
+its `CrossInk version` to a release, then decode with that release's symbols:
+
+```bash
+gh release download v1.6.0.2 -R jtmcn/CrossInk -p '*.elf.gz' && gunzip firmware-x4-pro-v1.6.0.2.elf.gz
+ADDR2LINE=$(find ~/.platformio/packages -name xtensa-esp32s3-elf-addr2line -type f | head -1)
+"$ADDR2LINE" -pfiaC -e firmware-x4-pro-v1.6.0.2.elf 0x4037EBAB 0x4037E568 ...   # the report's stack trace
+```
+
+`PS` interrupt level 6 in the exception registers means a debug exception,
+usually the end-of-stack watchpoint: a task stack overflow at the deepest frame.
