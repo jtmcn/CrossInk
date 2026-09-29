@@ -48,6 +48,10 @@ def dispatch(project: Project, args) -> None:
         from . import sync
         sync.sync(project)
         return
+    if args.command == 'setup':
+        from . import setup_cmd
+        setup_cmd.setup(project)
+        return
     raise PersonalError(f'`{args.command}` is not implemented yet')
 
 
