@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Changed
+
+- Text is drawn into the page buffer a byte at a time instead of pixel by pixel, cutting about 20 ms from every page turn on the X4 Pro.
+
 ## [v1.6.0] - 2026-09-21
 
 ### Added
