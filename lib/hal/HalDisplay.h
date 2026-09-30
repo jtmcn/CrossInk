@@ -107,6 +107,8 @@ class HalDisplay {
   // Firmware policy for the reader's extra white-image refresh.
   bool shouldSkipImageBlanking() const;
   bool supportsStripGrayscale() const;
+  // Cumulative ms waiting on panel BUSY; diff two readings to time a refresh.
+  uint32_t busyWaitMs() const;
 
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;
