@@ -854,6 +854,13 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
       innerBase = cursorX + left;  // screenX = innerBase + glyphX
     }
 
+    const bool blitted = rotation == TextRotation::Rotated90CW
+                             ? renderer.blitGlyph(bitmap, is2Bit, width, height, outerBase, innerBase, 0, -1, 1, 0,
+                                                  renderMode, pixelState)
+                             : renderer.blitGlyph(bitmap, is2Bit, width, height, innerBase, outerBase, 1, 0, 0, 1,
+                                                  renderMode, pixelState);
+    if (blitted) return;
+
     if (is2Bit) {
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
@@ -979,6 +986,117 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   } else {
     target[byteIndex] |= 1 << bitPosition;  // Set bit
   }
+}
+
+bool GfxRenderer::glyphBlitEnabled = true;
+
+namespace {
+enum class GlyphInk { Mono, Bw2, Msb2, Lsb2 };
+
+template <GlyphInk kInk>
+inline bool glyphPixelInked(const uint8_t* bitmap, const uint32_t p) {
+  if constexpr (kInk == GlyphInk::Mono) {
+    return (bitmap[p >> 3] >> (7 - (p & 7))) & 1;
+  } else {
+    const uint8_t raw = (bitmap[p >> 2] >> ((3 - (p & 3)) * 2)) & 0x3;  // 0 white .. 3 black
+    if constexpr (kInk == GlyphInk::Bw2) return raw != 0;
+    if constexpr (kInk == GlyphInk::Msb2) return raw == 1 || raw == 2;
+    return raw == 2;
+  }
+}
+
+inline void applyGlyphBits(uint8_t& byte, const uint8_t bits, const bool clearBits) {
+  if (clearBits) {
+    byte &= static_cast<uint8_t>(~bits);
+  } else {
+    byte |= bits;
+  }
+}
+
+// Each outer step is one physical row; inner steps walk that row, so bits are
+// gathered per byte and written with one read-modify-write.
+template <GlyphInk kInk>
+void blitGlyphRows(const uint8_t* bitmap, uint8_t* target, const uint32_t widthBytes, const int rowLo, const int rowHi,
+                   const int firstRow, const int rowStep, const int firstX, const int xStep, const int outerCount,
+                   const int innerCount, const uint32_t outerPixelStep, const uint32_t innerPixelStep,
+                   const bool clearBits) {
+  for (int o = 0; o < outerCount; ++o) {
+    const int rowY = firstRow + o * rowStep;
+    if (rowY < rowLo || rowY >= rowHi) continue;
+    uint8_t* row = target + static_cast<uint32_t>(rowY - rowLo) * widthBytes;
+    uint32_t p = static_cast<uint32_t>(o) * outerPixelStep;
+    int x = firstX;
+    int byteIndex = x >> 3;
+    uint8_t bits = 0;
+    for (int i = 0; i < innerCount; ++i, p += innerPixelStep, x += xStep) {
+      if ((x >> 3) != byteIndex) {
+        if (bits) applyGlyphBits(row[byteIndex], bits, clearBits);
+        bits = 0;
+        byteIndex = x >> 3;
+      }
+      if (glyphPixelInked<kInk>(bitmap, p)) bits |= static_cast<uint8_t>(0x80 >> (x & 7));
+    }
+    if (bits) applyGlyphBits(row[byteIndex], bits, clearBits);
+  }
+}
+}  // namespace
+
+bool GfxRenderer::blitGlyph(const uint8_t* bitmap, const bool is2Bit, const int width, const int height, const int lx0,
+                            const int ly0, const int lxGx, const int lyGx, const int lxGy, const int lyGy,
+                            const RenderMode mode, const bool pixelState) const {
+  if (!glyphBlitEnabled || width <= 0 || height <= 0) return false;
+
+  // Each glyph axis moves exactly one logical axis, so two corners bound the glyph.
+  const int lx1 = lx0 + lxGx * (width - 1) + lxGy * (height - 1);
+  const int ly1 = ly0 + lyGx * (width - 1) + lyGy * (height - 1);
+  if (textClipActive_ && (std::min(lx0, lx1) < textClipLeft_ || std::max(lx0, lx1) >= textClipRight_ ||
+                          std::min(ly0, ly1) < textClipTop_ || std::max(ly0, ly1) >= textClipBottom_)) {
+    return false;
+  }
+  int px0, py0, px1, py1;
+  rotateCoordinates(orientation, lx0, ly0, &px0, &py0, panelWidth, panelHeight);
+  rotateCoordinates(orientation, lx1, ly1, &px1, &py1, panelWidth, panelHeight);
+  if (std::min(px0, px1) < 0 || std::max(px0, px1) >= panelWidth || std::min(py0, py1) < 0 ||
+      std::max(py0, py1) >= panelHeight) {
+    return false;
+  }
+
+  int gxX, gxY, gyX, gyY;
+  rotateCoordinates(orientation, lx0 + lxGx, ly0 + lyGx, &gxX, &gxY, panelWidth, panelHeight);
+  rotateCoordinates(orientation, lx0 + lxGy, ly0 + lyGy, &gyX, &gyY, panelWidth, panelHeight);
+  gxX -= px0;
+  gxY -= py0;
+  gyX -= px0;
+  gyY -= py0;
+  // Iterate along whichever glyph axis runs along a physical row.
+  const bool innerIsGx = gxX != 0;
+  const int innerCount = innerIsGx ? width : height;
+  const int outerCount = innerIsGx ? height : width;
+  const int xStep = innerIsGx ? gxX : gyX;
+  const int rowStep = innerIsGx ? gyY : gxY;
+  const uint32_t innerPixelStep = innerIsGx ? 1 : static_cast<uint32_t>(width);
+  const uint32_t outerPixelStep = innerIsGx ? static_cast<uint32_t>(width) : 1;
+
+  uint8_t* target = _stripActive ? _stripBuf : frameBuffer;
+  const int rowLo = _stripActive ? _stripY0 : 0;
+  const int rowHi = _stripActive ? _stripY0 + _stripRows : panelHeight;
+  // Matches renderCharImpl: 2-bit gray planes always set bits; BW and 1-bit use pixelState.
+  const bool clearBits = (is2Bit && mode != BW) ? false : pixelState;
+
+  const auto run = [&](auto blit) {
+    blit(bitmap, target, panelWidthBytes, rowLo, rowHi, py0, rowStep, px0, xStep, outerCount, innerCount,
+         outerPixelStep, innerPixelStep, clearBits);
+  };
+  if (!is2Bit) {
+    run(blitGlyphRows<GlyphInk::Mono>);
+  } else if (mode == GRAYSCALE_MSB) {
+    run(blitGlyphRows<GlyphInk::Msb2>);
+  } else if (mode == GRAYSCALE_LSB) {
+    run(blitGlyphRows<GlyphInk::Lsb2>);
+  } else {
+    run(blitGlyphRows<GlyphInk::Bw2>);
+  }
+  return true;
 }
 
 namespace {

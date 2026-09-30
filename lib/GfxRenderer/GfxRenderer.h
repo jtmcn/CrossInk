@@ -239,6 +239,13 @@ class GfxRenderer {
   // Drawing
   bool isPixelBlack(int x, int y) const;
   void drawPixel(int x, int y, bool state = true) const;
+  // Byte-wise glyph draw, equivalent to drawPixel() per inked pixel. Glyph pixel
+  // (gx, gy) lands at logical (lx0 + gx*lxGx + gy*lxGy, ly0 + gx*lyGx + gy*lyGy).
+  // Returns false, drawing nothing, when the glyph crosses the panel or text clip.
+  bool blitGlyph(const uint8_t* bitmap, bool is2Bit, int width, int height, int lx0, int ly0, int lxGx, int lyGx,
+                 int lxGy, int lyGy, RenderMode mode, bool pixelState) const;
+  // Tests turn this off to compare against the per-pixel path.
+  static bool glyphBlitEnabled;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
   void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;
