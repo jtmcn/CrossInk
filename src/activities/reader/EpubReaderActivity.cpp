@@ -8,6 +8,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -77,6 +78,15 @@
 #include "util/ScreenshotUtil.h"
 
 namespace {
+// The simulator's HalDisplay has no panel BUSY line to time.
+uint32_t panelBusyWaitMs() {
+#ifdef SIMULATOR
+  return 0;
+#else
+  return display.busyWaitMs();
+#endif
+}
+
 constexpr unsigned long TOUCH_DICTIONARY_LOOKUP_HOLD_MS = 1000;
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long longPressMenuMs = 600;
@@ -5552,6 +5562,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (quickActionsPopup.processRender(renderer, mappedInput)) {
     return;
   }
+  [[maybe_unused]] const unsigned long renderStartMs = millis();
+  [[maybe_unused]] const uint32_t renderStartBusyMs = panelBusyWaitMs();
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
@@ -6252,7 +6264,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   {
     // Unified page read: the in-progress build's in-RAM table if it has reached the page,
     // otherwise the on-disk file (finalized section, or a partial from a previous session).
+    const unsigned long loadStartMs = millis();
     auto p = section->loadPage(section->currentPage);
+    [[maybe_unused]] const unsigned long loadMs = millis() - loadStartMs;
     if (!p) {
       pageLoadRetryCount++;
       if (pageLoadRetryCount <= MAX_PAGE_LOAD_RETRIES) {
@@ -6301,6 +6315,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       return;
     }
     lastRenderCompleteMs = millis();
+    LOG_DBG("ERS",
+            "Page turn spine=%d page=%d: prep %lu load %lu prewarm %lu compose %lu base %lu gray %lu total %lu ms "
+            "(panel busy %lu ms)",
+            currentSpineIndex, section->currentPage, loadStartMs - renderStartMs, loadMs, pageTurnTiming.prewarm,
+            pageTurnTiming.compose, pageTurnTiming.base, pageTurnTiming.gray, lastRenderCompleteMs - renderStartMs,
+            static_cast<unsigned long>(panelBusyWaitMs() - renderStartBusyMs));
     const uint8_t heapShapeRedrawStages = pendingHeapShapeReaderRedrawStages.exchange(0, std::memory_order_relaxed);
     if (heapShapeRedrawStages & HEAP_SHAPE_REDRAW_CLIP) {
       MemoryBudget::logHeapShape("clip.reader_redrawn");
@@ -6818,6 +6838,13 @@ void EpubReaderActivity::prepareCurrentSectionForRelayout() {
 bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fontId, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft, const bool updatePanel) {
+  pageTurnTiming = {};
+  unsigned long phaseStartMs = millis();
+  const auto endPhase = [&phaseStartMs](unsigned long& phaseMs) {
+    const unsigned long now = millis();
+    phaseMs = now - phaseStartMs;
+    phaseStartMs = now;
+  };
 #if CROSSINK_APP_CAP_TOUCH
   if (mappedInput.hasTouchHardware()) {
     if (!touchReaderPreviewAllocationAttempted) {
@@ -6865,6 +6892,7 @@ bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       return false;
     }
   }
+  endPhase(pageTurnTiming.prewarm);
 
 #if CROSSINK_APP_CAP_TOUCH
   buildFootnoteTouchTargets(*page, fontId, orientedMarginTop, orientedMarginLeft);
@@ -6976,6 +7004,7 @@ bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   } else if (pendingRenderModeToast) {
     drawRenderModeToastBuffer(labelForRenderModeToast(normalizeRenderMode(renderModeToastMode)));
   }
+  endPhase(pageTurnTiming.compose);
   if (!updatePanel) {
     return true;
   }
@@ -7040,12 +7069,14 @@ bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   } else {
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
   }
+  endPhase(pageTurnTiming.base);
   if (needsAnyGrayscale) {
     ensureGrayscaleStripScratch();
   }
   if (EpubGrayscale::runTiledGrayscalePass(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop,
                                            foregroundBlack, needsTextGrayscale, needsImageGrayscale,
                                            grayscaleStripScratch.get(), grayscaleStripScratchSize, overlapRefresh)) {
+    endPhase(pageTurnTiming.gray);
     return true;
   }
 
@@ -7080,6 +7111,7 @@ bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       renderer.restoreBwBuffer();
     }
   }
+  endPhase(pageTurnTiming.gray);
   return true;
 }
 

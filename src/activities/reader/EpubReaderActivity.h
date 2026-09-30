@@ -152,6 +152,11 @@ class EpubReaderActivity final : public Activity {
   QueuedTurnRenderingState queuedTurnRendering;
   unsigned long pageShownAtMs = 0UL;
   unsigned long lastRenderCompleteMs = 0UL;
+  // Phase timings (ms) filled by renderContents() for render()'s page-turn log.
+  struct PageTurnTiming {
+    unsigned long prewarm, compose, base, gray;
+  };
+  PageTurnTiming pageTurnTiming{};
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
   int idlePrewarmFontId = 0;

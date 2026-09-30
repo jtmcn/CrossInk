@@ -174,6 +174,8 @@ bool HalDisplay::shouldSkipImageBlanking() const {
 
 bool HalDisplay::supportsStripGrayscale() const { return einkDisplay.supportsStripGrayscale(); }
 
+uint32_t HalDisplay::busyWaitMs() const { return einkDisplay.busyWaitMs(); }
+
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
 
 uint16_t HalDisplay::getDisplayHeight() const { return einkDisplay.getDisplayHeight(); }
