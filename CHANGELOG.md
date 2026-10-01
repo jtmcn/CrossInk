@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Changed
+
+- On X4 Pro units with the UltraChip UC8279 display, anti-aliased pages appear about 75 ms sooner by using the display's built-in fast waveform before the anti-aliasing pass.
+
 ## [v1.6.0] - 2026-09-21
 
 ### Added
