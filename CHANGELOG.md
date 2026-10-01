@@ -7,6 +7,7 @@
 - On X4 Pro and X4 Classic units with the UltraChip UC8279 display, anti-aliased page turns skip redundant display memory uploads, so text smooths sooner and the next turn is ready sooner (on one X4 Pro, about 75 ms and 135 ms respectively).
 - On X4 Pro and X4 Classic units with the UltraChip UC8279 display, the reader prepares anti-aliased text while the page is still drawing, so jagged text turns smooth about 100 ms sooner.
 - X4 Pro units with the UltraChip UC8279 display send screen data at 20 MHz instead of 10 MHz, shortening every page refresh.
+- On X4 Pro units with the UltraChip UC8279 display, anti-aliased pages appear about 75 ms sooner by using the display's built-in fast waveform before the anti-aliasing pass.
 
 ## [v2.0.0] - 2026-11-19
 
