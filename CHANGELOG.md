@@ -9,6 +9,7 @@
 - On X4 Pro and X4 Classic units with the UltraChip UC8279 display, the reader prepares anti-aliased text while the page is still drawing, so jagged text turns smooth about 100 ms sooner.
 - X4 Pro and X4 Classic read and write the SD card at 40 MHz instead of 20 MHz, so books open and chapters index faster. Cards that can't keep up fall back to 20 MHz.
 - Text is drawn into the page buffer a byte at a time instead of pixel by pixel, cutting about 20 ms from every page turn on the X4 Pro.
+- On X4 Pro units with the UltraChip UC8279 display, anti-aliased pages appear about 75 ms sooner by using the display's built-in fast waveform before the anti-aliasing pass.
 
 ## [v1.6.0] - 2026-09-21
 
