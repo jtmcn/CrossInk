@@ -27,14 +27,14 @@ def check_guards(p: Project) -> list[str]:
     sdk_dirty = p.git(SDK, 'status', '--porcelain', '--untracked-files=no')
     _require(not sdk_dirty, f'{SDK_PATH} has uncommitted changes:\n{sdk_dirty}')
 
-    p.git(APP, 'fetch', '--quiet', app.fork_remote)
+    p.fetch(APP, app.fork_remote)
     fork_ref = f'{app.fork_remote}/{app.integration}'
     _require(p.git_ok(APP, 'rev-parse', '--verify', '--quiet', fork_ref)
              and p.git(APP, 'rev-parse', 'HEAD') == p.git(APP, 'rev-parse', fork_ref),
              f'`{app.integration}` differs from `{fork_ref}`; push or pull first')
 
     pin = p.pinned_sdk()
-    p.git(SDK, 'fetch', '--quiet', sdk.fork_remote)
+    p.fetch(SDK, sdk.fork_remote)
     sdk_ref = f'{sdk.fork_remote}/{sdk.integration}'
     _require(p.git_ok(SDK, 'merge-base', '--is-ancestor', pin, sdk_ref),
              f'pinned SDK commit {pin[:10]} is not on `{sdk_ref}`; push the SDK first')
@@ -44,7 +44,7 @@ def check_guards(p: Project) -> list[str]:
     warnings = []
     for repo, rev in ((APP, 'HEAD'), (SDK, pin)):
         spec = p.spec(repo)
-        p.git(repo, 'fetch', '--quiet', spec.upstream_remote)
+        p.fetch(repo, spec.upstream_remote)
         behind = int(p.git(repo, 'rev-list', '--count', f'{rev}..{p.upstream_main(repo)}'))
         if behind:
             warnings.append(f'{spec.name} is {behind} commit(s) behind upstream; consider `bin/personal sync`')
@@ -73,7 +73,7 @@ def release(p: Project, out=print) -> str:
     for warning in check_guards(p):
         out(f'warning: {warning}')
     app = p.spec(APP)
-    p.git(APP, 'fetch', '--quiet', '--tags', app.fork_remote)
+    p.fetch(APP, '--tags', app.fork_remote)
     base = versioning.base_version(p.root)
     tags = p.git(APP, 'tag', '--list', 'v*').splitlines()
     n = versioning.next_build_number(tags, base)

@@ -80,8 +80,8 @@ def sync(p: Project, out=print) -> None:
 
     for repo in (SDK, APP):
         spec = p.spec(repo)
-        p.git(repo, 'fetch', '--quiet', spec.upstream_remote)
-        p.git(repo, 'fetch', '--quiet', spec.fork_remote)
+        p.fetch(repo, spec.upstream_remote)
+        p.fetch(repo, spec.fork_remote)
     _require_not_stale(p)
 
     for repo in (SDK, APP):

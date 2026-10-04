@@ -78,8 +78,8 @@ def report(p: Project, fetch: bool = True) -> list[str]:
     if fetch:
         for repo in (APP, SDK):
             spec = p.spec(repo)
-            p.git(repo, 'fetch', '--quiet', spec.upstream_remote)
-            p.git(repo, 'fetch', '--quiet', spec.fork_remote)
+            p.fetch(repo, spec.upstream_remote)
+            p.fetch(repo, spec.fork_remote)
     return repo_lines(p, APP) + [''] + repo_lines(p, SDK) + sdk_pin_lines(p) + [''] + topic_lines(p)
 
 
