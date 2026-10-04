@@ -118,8 +118,8 @@ void begin(const int resetReason, const char* const resetReasonName) {
   buffer.attach(reinterpret_cast<char*>(bufferStorage.get()), BUFFER_BYTES);
 
   char banner[192];
-  const int n = snprintf(banner, sizeof(banner), "=== boot %s sha=%s dirty=%s reset=%s ===\n", CROSSINK_VERSION,
-                         CROSSINK_GIT_SHA, CROSSINK_GIT_DIRTY, resetReasonName);
+  const int n = snprintf(banner, sizeof(banner), "=== boot %s sha=%s dirty=%s reset=%s ===\n", AppVersion::version(),
+                         AppVersion::gitSha(), AppVersion::gitDirtyFlag(), resetReasonName);
   if (n > 0) appendLine(banner, std::min(static_cast<size_t>(n), sizeof(banner) - 1));
   if (!tail.empty()) {
     static constexpr char header[] = "--- last lines before reset ---\n";

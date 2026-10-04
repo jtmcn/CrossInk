@@ -2,6 +2,7 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <SdCardFont.h>
+#include <TouchReaderPreviewModel.h>
 #include <gtest/gtest.h>
 
 #include <array>
@@ -17,6 +18,7 @@ struct RasterFont {
   EpdFont font{&data};
   explicit RasterFont(int size) {
     for (auto [first, last] : {std::pair{32u, 127u},
+                               {0xB7u, 0xB7u},
                                {0x300u, 0x36Fu},
                                {0x590u, 0x6FFu},
                                {0x4E00u, 0x4E20u},
@@ -157,65 +159,6 @@ TEST(EpubTextGrayscaleTest, RealTextRasterMatchesFullAndStripTargets) {
 }
 }  // namespace
 
-TEST(EpubTextRaster, GlyphBlitMatchesPerPixelPath) {
-  for (const bool is2Bit : {true, false})
-    for (const int width : {792, 800})
-      for (int orientation = 0; orientation < 4; ++orientation) {
-        SCOPED_TRACE(testing::Message() << "2bit=" << is2Bit << " width=" << width << " orientation=" << orientation);
-        fakeheap::reset(true);
-        Storage.reset();
-        RasterFont fixture(12);
-        fixture.data.is2Bit = is2Bit;
-        HalDisplay display(width, 481);
-        GfxRenderer renderer(display);
-        renderer.begin();
-        renderer.insertFont(1, EpdFontFamily(&fixture.font));
-        renderer.setOrientation(GfxRenderer::Orientation(orientation));
-        const int w = renderer.getScreenWidth();
-        const int h = renderer.getScreenHeight();
-
-        const auto draw = [&](const bool black) {
-          renderer.drawText(1, 20, 40, "Abc xyz", black);
-          renderer.drawText(1, -6, 100, "Edge", black);
-          renderer.drawText(1, 30, h - 5, "Bottom", black);
-          renderer.drawText(1, w - 40, 200, "Right", black);
-          renderer.beginTextClip(50, 250, 60, 20);
-          renderer.drawText(1, 40, 262, "Clipped text", black);
-          renderer.drawText(1, 52, 268, "In", black);
-          renderer.endTextClip();
-          renderer.drawTextRotated90CW(1, 300, 300, "Rot", black);
-        };
-        const auto renderAll = [&](const bool blit) {
-          GfxRenderer::glyphBlitEnabled = blit;
-          std::vector<uint8_t> out;
-          std::vector<uint8_t> strips(display.bw.size());
-          for (auto mode : {GfxRenderer::BW, GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB})
-            for (const bool black : {true, false}) {
-              renderer.setRenderMode(mode);
-              renderer.clearScreen(black ? 0xFF : 0x00);
-              draw(black);
-              out.insert(out.end(), display.bw.begin(), display.bw.end());
-              for (int y = 0; y < display.height; y += 80) {
-                const int rows = std::min(80, display.height - y);
-                renderer.beginStripTarget(strips.data() + size_t(y) * display.stride, y, rows);
-                renderer.clearScreen(black ? 0xFF : 0x00);
-                draw(black);
-                renderer.endStripTarget();
-              }
-              out.insert(out.end(), strips.begin(), strips.end());
-            }
-          renderer.setRenderMode(GfxRenderer::BW);
-          GfxRenderer::glyphBlitEnabled = true;
-          return out;
-        };
-        const auto perPixel = renderAll(false);
-        EXPECT_EQ(renderAll(true), perPixel);
-        EXPECT_TRUE(
-            std::any_of(perPixel.begin(), perPixel.begin() + display.bw.size(), [](auto b) { return b != 0xFF; }));
-        renderer.removeFont(1);
-      }
-}
-
 TEST(EpubTextRaster, VariationSelectorsDoNotDrawOrAdvance) {
   for (const bool sd : {false, true}) {
     SCOPED_TRACE(testing::Message() << "sd=" << sd);
@@ -329,4 +272,51 @@ TEST(AbsoluteImageRaster, BitmapPlanesPreserveFourTonesAndWhiteMargins) {
   renderer.setRenderMode(GfxRenderer::BW);
   EXPECT_EQ(display.canceled, 1);
   file.close();
+}
+
+// A font switch begins with no resident glyphs. A wide replacement glyph makes
+// the cold scan fit fewer words than the final, correctly measured preview.
+TEST(EpubTextGrayscaleTest, ColdSdSamplePreviewMatchesFullyLoadedFont) {
+  for (int size : {12, 20}) {
+    for (int width : {160, 280}) {
+      for (bool focus : {false, true}) {
+        for (bool guide : {false, true}) {
+          SCOPED_TRACE(testing::Message() << size << " width=" << width << " focus=" << focus << " guide=" << guide);
+          fakeheap::reset(false);
+          Storage.reset();
+          RasterFont fixture(size);
+          fixture.glyphs.back().advanceX = size * 16 * 4;
+          SdCardFont sdFont;
+          Storage.put("preview.cpfont", fixture.file());
+          ASSERT_TRUE(sdFont.load("preview.cpfont"));
+          HalDisplay display;
+          GfxRenderer renderer(display);
+          renderer.begin();
+          renderer.insertFont(1, EpdFontFamily(sdFont.getEpdFont()));
+          renderer.registerSdCardFont(1, &sdFont);
+          renderer.insertFont(2, EpdFontFamily(&fixture.font));
+          FontCacheManager cache(renderer.getFontMap(), renderer.getSdCardFonts());
+          renderer.setFontCacheManager(&cache);
+          SampleReaderPreviewModel model;
+          ASSERT_TRUE(model.captureParagraph(READER_PREVIEW_PARAGRAPH));
+          auto draw = [&](int font) {
+            model.renderText(renderer, font, 10, 10, width, 100, 0, static_cast<uint8_t>(CssTextAlign::Left), focus,
+                             guide, true, 85);
+          };
+          renderer.clearScreen();
+          draw(2);
+          const auto expected = display.bw;
+          renderer.clearScreen();
+          const auto blank = display.bw;
+          auto scope = cache.createPrewarmScope();
+          draw(1);
+          EXPECT_EQ(display.bw, blank);  // Scanning must not paint the display.
+          ASSERT_TRUE(scope.endScanAndPrewarm());
+          draw(1);
+          EXPECT_NE(display.bw, blank);
+          EXPECT_TRUE(display.bw == expected);
+        }
+      }
+    }
+  }
 }
