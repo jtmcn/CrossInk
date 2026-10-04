@@ -67,6 +67,10 @@ class StatusTest(unittest.TestCase):
         git(self.fx.root, 'branch', '-D', 'personal')
         self.assertIn('`personal` branch missing', self.text())
 
+    def test_upstream_pinning_unpublished_sdk_commit_does_not_break_fetch(self):
+        self.fx.advance_app_upstream('up.txt', 'x\n', pin_sdk='63cf9ba4d9812e1bf0985c050c27f0abb357cd66')
+        self.assertIn('pin: matches crossink tip', self.text())
+
 
 if __name__ == '__main__':
     unittest.main()

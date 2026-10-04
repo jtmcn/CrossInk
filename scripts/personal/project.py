@@ -45,6 +45,10 @@ class Project:
     def git(self, repo: str, *args, check: bool = True) -> str:
         return self.runner.run(['git', *args], cwd=self.path(repo), check=check).stdout.strip()
 
+    def fetch(self, repo: str, *args) -> str:
+        # Callers fetch the SDK themselves; recursing fails when upstream pins an unpublished SDK commit.
+        return self.git(repo, 'fetch', '--quiet', '--no-recurse-submodules', *args)
+
     def git_ok(self, repo: str, *args) -> bool:
         return self.runner.run(['git', *args], cwd=self.path(repo), check=False).returncode == 0
 
