@@ -9,6 +9,7 @@
 - On X4 Pro and X4 Classic units with the UltraChip UC8279 display, the reader prepares anti-aliased text while the page is still drawing, so jagged text turns smooth about 100 ms sooner.
 - On X4 Pro units with the UltraChip UC8279 display, anti-aliased pages appear about 75 ms sooner by using the display's built-in fast waveform before the anti-aliasing pass.
 - Page turns with TTF and built-in scalable fonts on ESP32-S3 devices no longer redraw letters that were just drawn when a page mixes bold, italic, or heading text, removing occasional slow turns.
+- With TTF and built-in scalable fonts on ESP32-S3 devices, the reader draws letters the next page needs while you read, so turning to a page with new bold, italic, or symbol characters is no slower than any other turn.
 
 ## [v1.6.1] - 2026-10-03
 
