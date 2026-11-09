@@ -3,6 +3,7 @@
 ### Changed
 
 - Page turns with TTF and built-in scalable fonts on ESP32-S3 devices no longer redraw letters that were just drawn when a page mixes bold, italic, or heading text, removing occasional slow turns.
+- With TTF and built-in scalable fonts on ESP32-S3 devices, the reader draws letters the next page needs while you read, so turning to a page with new bold, italic, or symbol characters is no slower than any other turn.
 
 ## [v1.6.1] - 2026-10-03
 
