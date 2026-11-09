@@ -2745,9 +2745,14 @@ void EpubReaderActivity::idlePrewarmNextPage() {
   }
 
   const int renderFontId = activeSectionFontId != 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
-  if (!renderer.isSdCardFont(renderFontId) ||
-      (idlePrewarmSpine == currentSpineIndex && idlePrewarmPage == section->currentPage &&
-       idlePrewarmFontId == renderFontId)) {
+#if CROSSINK_SCALABLE_FONTS
+  // Scalable faces rasterize ~7 ms per new glyph; warm them while the reader reads.
+  constexpr bool fontNeedsIdlePrewarm = true;
+#else
+  const bool fontNeedsIdlePrewarm = renderer.isSdCardFont(renderFontId);
+#endif
+  if (!fontNeedsIdlePrewarm || (idlePrewarmSpine == currentSpineIndex && idlePrewarmPage == section->currentPage &&
+                                idlePrewarmFontId == renderFontId)) {
     return;
   }
 
@@ -2769,13 +2774,13 @@ void EpubReaderActivity::idlePrewarmNextPage() {
 
   auto page = section->loadPage(nextPage);
   if (!page) {
-    LOG_DBG("ERS", "Idle SD font prewarm skipped: failed to load spine=%d page=%d", currentSpineIndex, nextPage);
+    LOG_DBG("ERS", "Idle font prewarm skipped: failed to load spine=%d page=%d", currentSpineIndex, nextPage);
     return;
   }
 
   auto* fcm = renderer.getFontCacheManager();
   if (!fcm) {
-    LOG_DBG("ERS", "Idle SD font prewarm skipped: no font cache manager");
+    LOG_DBG("ERS", "Idle font prewarm skipped: no font cache manager");
     return;
   }
 
@@ -2783,7 +2788,14 @@ void EpubReaderActivity::idlePrewarmNextPage() {
   auto scope = fcm->createPrewarmScope();
   page->renderText(renderer, renderFontId, 0, 0);
   scope.endScanAndPrewarm();
-  LOG_DBG("ERS", "Idle SD font prewarm: spine=%d page=%d in %lums", currentSpineIndex, nextPage, millis() - startedAt);
+#if CROSSINK_SCALABLE_FONTS
+  // Take the counters here so the next turn's cache line reports only that turn.
+  const auto ttf = HalScalableFont::takeCacheStats();
+  LOG_DBG("ERS", "Idle font prewarm: spine=%d page=%d in %lums (TTF glyph miss %lu)", currentSpineIndex, nextPage,
+          millis() - startedAt, static_cast<unsigned long>(ttf.pixelMisses));
+#else
+  LOG_DBG("ERS", "Idle font prewarm: spine=%d page=%d in %lums", currentSpineIndex, nextPage, millis() - startedAt);
+#endif
 }
 
 // One dismissal rule for every transient reader confirmation: it clears when its
