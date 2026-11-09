@@ -63,6 +63,12 @@ class HalScalableFont {
   bool probeGlyph(uint32_t cp, uint8_t points);
   static bool inspectFile(const char* path, Info& info, bool* unavailable = nullptr);
   static uint32_t renderingRevision();
+  // Glyph cache counters since the last call; reading them resets them.
+  struct CacheStats {
+    uint32_t pixelHits = 0, pixelMisses = 0, pixelEvictions = 0, pixelArenaResets = 0;
+    uint32_t metricHits = 0, metricMisses = 0, metricEvictions = 0;
+  };
+  static CacheStats takeCacheStats();
   uint32_t fingerprint() const { return hash_; }
   const EpdFont* atSize(uint8_t points);
 
