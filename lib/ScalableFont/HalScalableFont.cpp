@@ -28,7 +28,9 @@ constexpr size_t PixelCacheSlots = 4096;
 constexpr size_t MetricCacheSlots = 4096;
 static_assert((PixelCacheSlots / CacheWays & (PixelCacheSlots / CacheWays - 1)) == 0, "sets must be a power of two");
 static_assert((MetricCacheSlots / CacheWays & (MetricCacheSlots / CacheWays - 1)) == 0, "sets must be a power of two");
-constexpr size_t KerningCacheSlots = 512;
+constexpr size_t KerningCacheSlots = 4096;
+static_assert((KerningCacheSlots / CacheWays & (KerningCacheSlots / CacheWays - 1)) == 0,
+              "sets must be a power of two");
 constexpr uint32_t AdapterRevision = 9;
 constexpr uint32_t SfntChecksumMagic = 0xB1B0AFBAu;
 // Unicode ends at 0x10FFFF, so the high bit safely marks a shaped glyph ID in
@@ -128,11 +130,19 @@ struct MetricEntry {
   EpdGlyph glyph{};
 };
 
+struct KerningKey {
+  uint64_t left = 0;
+  uint32_t right = 0;
+  bool operator==(const KerningKey& other) const { return left == other.left && right == other.right; }
+};
+
 struct KerningEntry {
-  uint64_t leftKey = 0;
-  uint32_t rightGlyph = 0;
+  KerningKey key{};
   int8_t value = 0;
 };
+
+uint64_t keyHash(const uint64_t key) { return key; }
+uint64_t keyHash(const KerningKey& key) { return key.left ^ (uint64_t(key.right) << 21); }
 
 constexpr size_t PixelTableBytes = alignSize(sizeof(PixelEntry) * PixelCacheSlots, alignof(std::max_align_t));
 constexpr size_t MetricTableBytes = alignSize(sizeof(MetricEntry) * MetricCacheSlots, alignof(std::max_align_t));
@@ -142,12 +152,13 @@ constexpr size_t PixelArenaBytes = CacheTableBytes + PixelBytes;
 
 // Returns the entry for key, most recently used first. On a miss the LRU way
 // is dropped and an empty entry is returned at the front for the caller to fill.
-template <typename Entry>
-Entry& lookupSet(Entry* table, const size_t slots, const uint64_t key, bool& hit, bool& evicted) {
-  const size_t sets = slots / CacheWays;
-  Entry* set = table + (size_t((key * 0x9E3779B97F4A7C15ull) >> 32) & (sets - 1)) * CacheWays;
+template <typename Entry, typename Key>
+Entry& lookupSet(Entry* table, const size_t slots, const Key& key, bool& hit, bool& evicted) {
+  // Top bits of the product depend on every key bit, including the font id above bit 40.
+  const unsigned setBits = unsigned(__builtin_ctzll(slots / CacheWays));
+  Entry* set = table + size_t((keyHash(key) * 0x9E3779B97F4A7C15ull) >> (64 - setBits)) * CacheWays;
   for (size_t way = 0; way < CacheWays; ++way) {
-    if (set[way].key != key) continue;
+    if (!(set[way].key == key)) continue;
     const Entry found = set[way];
     for (size_t i = way; i > 0; --i) set[i] = set[i - 1];
     set[0] = found;
@@ -156,7 +167,7 @@ Entry& lookupSet(Entry* table, const size_t slots, const uint64_t key, bool& hit
     return set[0];
   }
   hit = false;
-  evicted = set[CacheWays - 1].key != 0;
+  evicted = !(set[CacheWays - 1].key == Key{});
   for (size_t i = CacheWays - 1; i > 0; --i) set[i] = set[i - 1];
   set[0] = Entry{};
   return set[0];
@@ -241,17 +252,27 @@ struct Runtime {
     return true;
   }
 
-  int8_t kerning(freeink::font::FtFont& font, const uint32_t cacheId, const uint32_t leftGlyph,
-                 const uint32_t rightGlyph, const uint8_t points) {
-    if (!leftGlyph || !rightGlyph) return 0;
-    const uint64_t leftKey = cacheKey(cacheId, leftGlyph, points);
-    auto& entry = kerningEntries[(leftGlyph * 31u + rightGlyph * 17u + points * 7u + cacheId) % KerningCacheSlots];
-    if (entry.leftKey == leftKey && entry.rightGlyph == rightGlyph) return entry.value;
+  // Keyed by codepoint so a hit skips both cmap lookups; glyphIdOf runs only on a miss.
+  template <typename GlyphIdOf>
+  int8_t kerning(freeink::font::FtFont& font, const uint32_t cacheId, const uint32_t left, const uint32_t right,
+                 const uint8_t points, GlyphIdOf glyphIdOf) {
+    const KerningKey key{cacheKey(cacheId, left, points), right};
+    bool hit = false;
+    bool evicted = false;
+    auto& entry = lookupSet(kerningEntries, KerningCacheSlots, key, hit, evicted);
+    if (hit) {
+      ++stats.kerningHits;
+      return entry.value;
+    }
+    ++stats.kerningMisses;
+    if (evicted) ++stats.kerningEvictions;
 
-    const auto measured = font.kerningGlyphs26_6(leftGlyph, rightGlyph, scalableFontPixelSize26_6(points));
-    const auto value = int8_t(std::clamp<int32_t>(round26_6To16(measured), -128, 127));
-    entry = {leftKey, rightGlyph, value};
-    return value;
+    const uint32_t leftGlyph = glyphIdOf(left);
+    const uint32_t rightGlyph = glyphIdOf(right);
+    const auto measured =
+        leftGlyph && rightGlyph ? font.kerningGlyphs26_6(leftGlyph, rightGlyph, scalableFontPixelSize26_6(points)) : 0;
+    entry = {key, int8_t(std::clamp<int32_t>(round26_6To16(measured), -128, 127))};
+    return entry.value;
   }
 
   const uint8_t* packedBitmap(freeink::font::FtFont& font, const uint32_t cacheId, uint32_t glyphOrCodepoint,
@@ -897,11 +918,11 @@ bool HalScalableFont::covers(void* ctx, uint32_t cp) {
 int8_t HalScalableFont::kerning(void* ctx, uint32_t a, uint32_t b) {
   ScalableFontAccess access;
   auto& s = *static_cast<Size*>(ctx);
-  const auto glyph = [&](uint32_t cp) {
+  const auto glyph = [&](uint32_t cp) -> uint32_t {
     const auto ligature = cp >= 0xfb00 && cp <= 0xfb04 ? s.owner->ligatureGlyphs_[cp - 0xfb00] : 0;
     return ligature ? ligature : s.owner->font_.glyphId(cp);
   };
-  return runtime().kerning(s.owner->font_, s.owner->cacheId_, glyph(a), glyph(b), s.points);
+  return runtime().kerning(s.owner->font_, s.owner->cacheId_, a, b, s.points, glyph);
 }
 uint32_t HalScalableFont::ligature(void* ctx, uint32_t a, uint32_t b) {
   ScalableFontAccess access;

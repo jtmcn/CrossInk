@@ -215,4 +215,25 @@ int main(int argc, char** argv) {
     assert(stats.pixelHits > 0 && stats.pixelMisses == 0 && stats.pixelEvictions == 0);
     assert(stats.metricHits > 0 && stats.metricMisses == 0 && stats.metricEvictions == 0);
   }
+  {
+    // Layout kerns every letter pair; four styles of common pairs overflowed the old 512-slot table.
+    const char letters[] = "etaoinshrdlucmfwyp";
+    const auto kernText = [&] {
+      for (size_t face = 0; face < 4; ++face) {
+        const auto* data = builtin[face].atSize(12)->data;
+        for (const char left : letters) {
+          for (const char right : letters) {
+            if (left && right) data->kerningHandler(data->glyphMissCtx, uint8_t(left), uint8_t(right));
+          }
+        }
+      }
+    };
+    kernText();
+    HalScalableFont::takeCacheStats();
+    kernText();
+    const auto stats = HalScalableFont::takeCacheStats();
+    std::printf("Warm kerning: hit %u miss %u\n", unsigned(stats.kerningHits), unsigned(stats.kerningMisses));
+    // 1296 pairs fill 1024 four-way sets about 30% full, so only a rare overfull set may still miss.
+    assert(stats.kerningHits + stats.kerningMisses == 4 * 18 * 18 && stats.kerningMisses * 100 < 4 * 18 * 18);
+  }
 }

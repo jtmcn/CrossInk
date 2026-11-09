@@ -3,6 +3,7 @@
 ### Changed
 
 - Page turns with TTF and built-in scalable fonts on ESP32-S3 devices no longer redraw letters that were just drawn when a page mixes bold, italic, or heading text, removing occasional slow turns.
+- Opening an unindexed chapter with TTF and built-in scalable fonts on ESP32-S3 devices is faster: kerning results now stay cached across a chapter, cutting layout time by roughly a third.
 
 ## [v1.6.1] - 2026-10-03
 
