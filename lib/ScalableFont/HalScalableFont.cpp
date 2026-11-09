@@ -22,8 +22,12 @@ constexpr auto Pool = MemoryPool::Psram;
 // 1 MiB in a warm preview; retain smaller arenas for fragmented PSRAM heaps.
 constexpr size_t WorkspaceOptions[] = {1280 * 1024, 1024 * 1024, 768 * 1024};
 constexpr size_t PixelBytes = 512 * 1024;
-constexpr size_t PixelCacheSlots = 512;
-constexpr size_t MetricCacheSlots = 512;
+// 4-way sets: a direct-mapped table let other styles/sizes evict hot glyphs.
+constexpr size_t CacheWays = 4;
+constexpr size_t PixelCacheSlots = 4096;
+constexpr size_t MetricCacheSlots = 4096;
+static_assert((PixelCacheSlots / CacheWays & (PixelCacheSlots / CacheWays - 1)) == 0, "sets must be a power of two");
+static_assert((MetricCacheSlots / CacheWays & (MetricCacheSlots / CacheWays - 1)) == 0, "sets must be a power of two");
 constexpr size_t KerningCacheSlots = 512;
 constexpr uint32_t AdapterRevision = 9;
 constexpr uint32_t SfntChecksumMagic = 0xB1B0AFBAu;
@@ -135,6 +139,29 @@ constexpr size_t MetricTableBytes = alignSize(sizeof(MetricEntry) * MetricCacheS
 constexpr size_t KerningTableBytes = alignSize(sizeof(KerningEntry) * KerningCacheSlots, alignof(std::max_align_t));
 constexpr size_t CacheTableBytes = PixelTableBytes + MetricTableBytes + KerningTableBytes;
 constexpr size_t PixelArenaBytes = CacheTableBytes + PixelBytes;
+
+// Returns the entry for key, most recently used first. On a miss the LRU way
+// is dropped and an empty entry is returned at the front for the caller to fill.
+template <typename Entry>
+Entry& lookupSet(Entry* table, const size_t slots, const uint64_t key, bool& hit, bool& evicted) {
+  const size_t sets = slots / CacheWays;
+  Entry* set = table + (size_t((key * 0x9E3779B97F4A7C15ull) >> 32) & (sets - 1)) * CacheWays;
+  for (size_t way = 0; way < CacheWays; ++way) {
+    if (set[way].key != key) continue;
+    const Entry found = set[way];
+    for (size_t i = way; i > 0; --i) set[i] = set[i - 1];
+    set[0] = found;
+    hit = true;
+    evicted = false;
+    return set[0];
+  }
+  hit = false;
+  evicted = set[CacheWays - 1].key != 0;
+  for (size_t i = CacheWays - 1; i > 0; --i) set[i] = set[i - 1];
+  set[0] = Entry{};
+  return set[0];
+}
+
 struct Runtime;
 Runtime* liveRuntime = nullptr;
 struct Runtime {
@@ -153,17 +180,14 @@ struct Runtime {
   uint16_t failedMetricHeight = 0;
   uint16_t lastBitmapWidth = 0;
   uint16_t lastBitmapHeight = 0;
+  HalScalableFont::CacheStats stats{};
 
   static uint64_t cacheKey(const uint32_t cacheId, const uint32_t glyphOrCodepoint, const uint8_t points) {
     return (uint64_t(cacheId) << 40) | (uint64_t(points) << 32) | glyphOrCodepoint;
   }
 
-  static size_t cacheIndex(const uint32_t cacheId, const uint32_t glyphOrCodepoint, const uint8_t points,
-                           const size_t slots) {
-    return (glyphOrCodepoint * 31u + points * 7u + cacheId) % slots;
-  }
-
   void clearPixels() {
+    if (pixelUsed) ++stats.pixelArenaResets;
     pixelUsed = 0;
     if (pixelEntries)
       for (size_t i = 0; i < PixelCacheSlots; ++i) pixelEntries[i] = PixelEntry{};
@@ -184,11 +208,16 @@ struct Runtime {
   bool glyphMetrics(freeink::font::FtFont& font, const uint32_t cacheId, const uint32_t glyphOrCodepoint,
                     const uint8_t points, EpdGlyph& glyph) {
     const uint64_t key = cacheKey(cacheId, glyphOrCodepoint, points);
-    auto& entry = metricEntries[cacheIndex(cacheId, glyphOrCodepoint, points, MetricCacheSlots)];
-    if (entry.key == key) {
+    bool hit = false;
+    bool evicted = false;
+    auto& entry = lookupSet(metricEntries, MetricCacheSlots, key, hit, evicted);
+    if (hit) {
+      ++stats.metricHits;
       glyph = entry.glyph;
       return true;
     }
+    ++stats.metricMisses;
+    if (evicted) ++stats.metricEvictions;
 
     freeink::font::FtFont::GlyphMetrics metrics;
     allocator.clearFailure();
@@ -228,8 +257,15 @@ struct Runtime {
   const uint8_t* packedBitmap(freeink::font::FtFont& font, const uint32_t cacheId, uint32_t glyphOrCodepoint,
                               uint8_t points, uint8_t width, uint8_t height) {
     const uint64_t key = cacheKey(cacheId, glyphOrCodepoint, points);
-    auto& entry = pixelEntries[cacheIndex(cacheId, glyphOrCodepoint, points, PixelCacheSlots)];
-    if (entry.key == key) return pixelData + entry.offset;
+    bool hit = false;
+    bool evicted = false;
+    auto& entry = lookupSet(pixelEntries, PixelCacheSlots, key, hit, evicted);
+    if (hit) {
+      ++stats.pixelHits;
+      return pixelData + entry.offset;
+    }
+    ++stats.pixelMisses;
+    if (evicted) ++stats.pixelEvictions;
 
     allocator.clearFailure();
     const auto* bitmap =
@@ -348,6 +384,13 @@ HalScalableFont::~HalScalableFont() {
 }
 // Increment the adapter revision when metric/coverage conventions change.
 uint32_t HalScalableFont::renderingRevision() { return AdapterRevision; }
+
+HalScalableFont::CacheStats HalScalableFont::takeCacheStats() {
+  auto& rt = runtime();
+  const CacheStats stats = rt.stats;
+  rt.stats = {};
+  return stats;
+}
 
 bool HalScalableFont::openMemory(const uint8_t* bytes, size_t size) {
   freeink::font::FtFont::RenderOptions options;

@@ -8,6 +8,9 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#if CROSSINK_SCALABLE_FONTS
+#include <HalScalableFont.h>
+#endif
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -6746,6 +6749,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       return;
     }
     lastRenderCompleteMs = millis();
+#if CROSSINK_SCALABLE_FONTS
+    {
+      const auto ttf = HalScalableFont::takeCacheStats();
+      LOG_DBG("ERS", "TTF glyph cache: pixel hit %lu miss %lu evict %lu reset %lu; metric hit %lu miss %lu evict %lu",
+              static_cast<unsigned long>(ttf.pixelHits), static_cast<unsigned long>(ttf.pixelMisses),
+              static_cast<unsigned long>(ttf.pixelEvictions), static_cast<unsigned long>(ttf.pixelArenaResets),
+              static_cast<unsigned long>(ttf.metricHits), static_cast<unsigned long>(ttf.metricMisses),
+              static_cast<unsigned long>(ttf.metricEvictions));
+    }
+#endif
     const uint8_t heapShapeRedrawStages = pendingHeapShapeReaderRedrawStages.exchange(0, std::memory_order_relaxed);
     if (heapShapeRedrawStages & HEAP_SHAPE_REDRAW_CLIP) {
       MemoryBudget::logHeapShape("clip.reader_redrawn");
