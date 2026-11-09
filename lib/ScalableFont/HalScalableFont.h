@@ -67,6 +67,7 @@ class HalScalableFont {
   struct CacheStats {
     uint32_t pixelHits = 0, pixelMisses = 0, pixelEvictions = 0, pixelArenaResets = 0;
     uint32_t metricHits = 0, metricMisses = 0, metricEvictions = 0;
+    uint32_t kerningHits = 0, kerningMisses = 0, kerningEvictions = 0;
   };
   static CacheStats takeCacheStats();
   uint32_t fingerprint() const { return hash_; }
