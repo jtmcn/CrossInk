@@ -16,6 +16,8 @@ struct Bookmark {
   // Optional 1-based paragraph anchor from the section cache. UINT16_MAX means unavailable.
   uint16_t paragraphIndex = UINT16_MAX;
   char snippet[BOOKMARK_SNIPPET_MAX] = {};
+  // Written by the reader on sleep rather than by the user; kept as a rolling trail.
+  bool isAuto = false;
 };
 
 struct BookmarkedBookEntry {
@@ -55,10 +57,17 @@ class BookmarkStore {
 
   AddResult addBookmark(uint16_t spineIndex, float progress, int pageCount, const char* chapterTitle,
                         uint16_t paragraphIndex = UINT16_MAX, const char* snippet = nullptr);
+  // Records a sleep-time stop point. Returns false when skipped (manual bookmark on the
+  // page, or the newest auto bookmark is already this page).
+  bool addAutoBookmark(uint16_t spineIndex, float progress, int pageCount, const char* chapterTitle,
+                       uint16_t paragraphIndex = UINT16_MAX, const char* snippet = nullptr);
+  // Manual-only: auto bookmarks don't drive the page indicator or the toggle.
   void removeBookmarkForPage(uint16_t spineIndex, float pageProgress, int pageCount);
   bool removeBookmarkAt(size_t index);
   bool hasBookmarkForPage(uint16_t spineIndex, float pageProgress, int pageCount);
   const std::vector<Bookmark>& getBookmarks() const { return bookmarks; }
+
+  static constexpr size_t MAX_AUTO_BOOKMARKS = 10;
 
   // Flush to disk if dirty. Called automatically by add/remove; also call from reader onExit().
   void saveToFile();

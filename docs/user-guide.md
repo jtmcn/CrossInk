@@ -938,6 +938,8 @@ To create a bookmark, hold **Confirm** for 1 second while inside a book. A popup
 
 To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for 1 second, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 
+To keep a trail of where you stopped, turn on **Settings > Reader > Bookmark on Sleep**. Each time the device sleeps with an EPUB open, by the power button or the sleep timer, CrossInk adds an automatic bookmark at the current page, labelled "Auto" in the bookmark list. Only the 10 most recent automatic bookmarks are kept. Sleeping again without turning a page adds nothing, and pages that already have your own bookmark are left alone. Adding your own bookmark on a page turns its automatic bookmark into a regular one.
+
 Bookmarks are stored as per-book `.bin` files in the `.crosspoint/bookmarks` folder.
 
 ### 5.3 Dictionary

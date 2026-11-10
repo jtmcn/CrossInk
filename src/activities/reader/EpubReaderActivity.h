@@ -379,6 +379,9 @@ class EpubReaderActivity final : public Activity {
   bool queueProgressSave(int spineIndex, int currentPage, int pageCount, bool forceSave = false);
   void saveProgressBeforeRestart();
   bool saveReadingProgress();
+  void describeCurrentPageForBookmark(std::string& chapterTitle, uint16_t& paragraphIndex, char* snippet,
+                                      size_t snippetSize);
+  void recordAutoBookmarkForSleep();
   bool saveLinkStack() const;
   void loadLinkStack();
   void cacheCurrentSectionPosition();

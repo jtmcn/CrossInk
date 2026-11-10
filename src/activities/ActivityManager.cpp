@@ -1016,6 +1016,7 @@ void ActivityManager::goToReaderAndRunMenuAction(std::string path, const uint8_t
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
+  exitingForSleep = true;  // cleared below; the simulator keeps running after "deep sleep"
   const bool canSnapshotOverlay = currentActivity && currentActivity->canSnapshotForSleepOverlay();
   const GfxRenderer::Orientation sleepPopupOrientation = renderer.getOrientation();
   std::string currentBookPath = getCurrentBookPath();
@@ -1039,10 +1040,12 @@ void ActivityManager::goToSleep(bool fromTimeout) {
     pendingActivity.reset();
     pendingAction = PendingAction::None;
     currentActivity = std::move(sleepActivity);
+    exitingForSleep = false;
     return;
   }
   replaceActivity(std::move(sleepActivity));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
+  exitingForSleep = false;
 }
 
 void ActivityManager::goToBoot() { replaceActivity(std::make_unique<BootActivity>(renderer, mappedInput)); }

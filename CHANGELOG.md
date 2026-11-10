@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Added
+
+- Optionally add an automatic EPUB bookmark each time the device sleeps, from the power button or the sleep timer, keeping the 10 most recent so you can return to where you stopped in earlier sessions.
+
 ## [v1.6.1] - 2026-10-03
 
 ### Added

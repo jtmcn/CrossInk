@@ -610,6 +610,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t fadingFix = 0;
   // Quick-return from footnotes when a footnote shortcut is active.
   uint8_t pwrBtnFootnoteBack = 1;
+  // Add a rolling auto bookmark when the device sleeps while an EPUB is open.
+  uint8_t autoBookmarkOnSleep = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
   // EPUB section indexing policy. The current chapter keeps its active build.
