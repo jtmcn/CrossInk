@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <cmath>
+#include <cstdio>
 
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
@@ -161,17 +162,22 @@ void EpubReaderBookmarkListActivity::buildListScreen(UiApp::ScreenType& screen) 
     return;
   }
   std::vector<std::string> values(bookmarks.size());
+  std::vector<std::string> autoSubtitles(bookmarks.size());
   std::vector<fui::ListItem> items;
   items.reserve(bookmarks.size());
   for (size_t i = 0; i < bookmarks.size(); ++i) {
     const Bookmark& bookmark = bookmarks[i];
     values[i] = std::to_string(static_cast<int>(std::lround(bookmark.progress * 100.0))) + "%";
+    const char* chapter = bookmark.chapterTitle[0] != '\0' ? bookmark.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
     fui::ListItem item;
-    item.label = bookmark.snippet[0] != '\0'
-                     ? bookmark.snippet
-                     : (bookmark.chapterTitle[0] != '\0' ? bookmark.chapterTitle : tr(STR_UNKNOWN_CHAPTER));
-    if (bookmark.snippet[0] != '\0') {
-      item.subtitle = bookmark.chapterTitle[0] != '\0' ? bookmark.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
+    item.label = bookmark.snippet[0] != '\0' ? bookmark.snippet : chapter;
+    if (bookmark.isAuto) {
+      char subtitle[BOOKMARK_CHAPTER_TITLE_MAX + 32];
+      snprintf(subtitle, sizeof(subtitle), tr(STR_AUTO_BOOKMARK_FORMAT), chapter);
+      autoSubtitles[i] = subtitle;
+      item.subtitle = autoSubtitles[i].c_str();
+    } else if (bookmark.snippet[0] != '\0') {
+      item.subtitle = chapter;
     }
     item.value = values[i].c_str();
     item.actionValue = static_cast<int16_t>(i);

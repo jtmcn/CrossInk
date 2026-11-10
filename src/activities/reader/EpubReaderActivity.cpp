@@ -2507,6 +2507,7 @@ void EpubReaderActivity::onExit() {
   // Deactivate reader-specific front button mapping.
   mappedInput.setReaderMode(false);
 
+  recordAutoBookmarkForSleep();
   if (!saveReadingProgress()) {
     LOG_ERR("ERS", "Failed to flush debounced reader progress on exit");
   }
@@ -4321,23 +4322,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuAction action, const 
         BOOKMARKS.removeBookmarkForPage(spine, progress, bookmarkPageCount);
         bookmarkFeedbackType = BookmarkFeedbackType::Removed;
       } else {
-        const char* chapterTitle = nullptr;
-        std::string titleStr;
-        const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-        if (tocIndex != -1) {
-          titleStr = epub->getTocItem(tocIndex).title;
-          chapterTitle = titleStr.c_str();
-        }
+        std::string chapterTitle;
         uint16_t paragraphIndex = UINT16_MAX;
-        if (const auto pIdx = section->getParagraphIndexForPage(static_cast<uint16_t>(section->currentPage))) {
-          paragraphIndex = *pIdx;
-        }
         char snippet[BOOKMARK_SNIPPET_MAX] = {};
-        if (auto page = section->loadPage(section->currentPage)) {
-          buildBookmarkSnippet(*page, snippet, sizeof(snippet));
-        }
+        describeCurrentPageForBookmark(chapterTitle, paragraphIndex, snippet, sizeof(snippet));
         const auto addResult =
-            BOOKMARKS.addBookmark(spine, progress, bookmarkPageCount, chapterTitle, paragraphIndex, snippet);
+            BOOKMARKS.addBookmark(spine, progress, bookmarkPageCount, chapterTitle.c_str(), paragraphIndex, snippet);
         bookmarkFeedbackType = (addResult == BookmarkStore::AddResult::Added) ? BookmarkFeedbackType::Added
                                                                               : BookmarkFeedbackType::LimitReached;
       }
@@ -7176,6 +7166,36 @@ bool EpubReaderActivity::saveReadingProgress() {
   if (!progress) return true;
   return saveProgress(progress->spineIndex, progress->pageNumber, progress->pageCount,
                       /*allowDuringFootnotePreview=*/preview);
+}
+
+void EpubReaderActivity::describeCurrentPageForBookmark(std::string& chapterTitle, uint16_t& paragraphIndex,
+                                                        char* snippet, const size_t snippetSize) {
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  if (tocIndex != -1) chapterTitle = epub->getTocItem(tocIndex).title;
+  if (const auto pIdx = section->getParagraphIndexForPage(static_cast<uint16_t>(section->currentPage))) {
+    paragraphIndex = *pIdx;
+  }
+  if (auto page = section->loadPage(section->currentPage)) {
+    buildBookmarkSnippet(*page, snippet, snippetSize);
+  }
+}
+
+void EpubReaderActivity::recordAutoBookmarkForSleep() {
+  if (!SETTINGS.autoBookmarkOnSleep || !activityManager.isExitingForSleep()) return;
+  const int pageCount = section ? section->estimatedTotalPages() : 0;
+  if (!epub || !section || pageCount == 0 || section->pageCount == 0) return;
+  // A followed link or footnote is a detour; saved progress keeps the origin instead.
+  if (activeFootnotePreview || !pendingFootnotePreviewAnchor.empty() || footnoteDepth > 0) return;
+
+  const uint16_t spine = static_cast<uint16_t>(currentSpineIndex);
+  const float progress = static_cast<float>(section->currentPage) / static_cast<float>(pageCount);
+  std::string chapterTitle;
+  uint16_t paragraphIndex = UINT16_MAX;
+  char snippet[BOOKMARK_SNIPPET_MAX] = {};
+  describeCurrentPageForBookmark(chapterTitle, paragraphIndex, snippet, sizeof(snippet));
+  if (BOOKMARKS.addAutoBookmark(spine, progress, pageCount, chapterTitle.c_str(), paragraphIndex, snippet)) {
+    LOG_DBG("ERS", "Auto bookmark at spine %u page %d", spine, section->currentPage);
+  }
 }
 
 bool EpubReaderActivity::saveLinkStack() const {

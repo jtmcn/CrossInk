@@ -109,3 +109,4 @@ add_subdirectory(scalable_fonts)
 
 add_subdirectory(glyph_bitmap)
 add_subdirectory(sd_log_sink)
+add_subdirectory(bookmark_store)
