@@ -1189,11 +1189,13 @@ bool ActivityManager::goToSleep(bool fromTimeout) {
   if (renderBeforeExit) sleepActivity->onEnter();
 
   TouchRegistry::getInstance().clear();
+  exitingForSleep = true;
   exitActivity(lock);
   while (!stackActivities.empty()) {
     stackActivities.back()->onExit();
     stackActivities.pop_back();
   }
+  exitingForSleep = false;
   pendingHomeReaderTarget = nullptr;
   afterReturnActivity.reset();
   afterReturnOwner = nullptr;

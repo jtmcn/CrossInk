@@ -31,6 +31,7 @@ class EpubReaderBookmarkListActivity final : public Activity {
   const BookmarkRecords& bookmarks;
   // SDK rowProvider consumes this buffer before requesting the next row.
   char rowProgress[16]{};
+  char rowSubtitle[BOOKMARK_CHAPTER_TITLE_MAX + 32]{};
   int selectedIndex = 0;
   bool confirmingDelete = false;
   ButtonNavigator buttonNavigator;

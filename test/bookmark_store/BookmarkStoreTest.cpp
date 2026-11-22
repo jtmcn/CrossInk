@@ -1,6 +1,7 @@
 #include <HalStorage.h>
 #include <uzlib.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -52,7 +53,7 @@ std::string storePath(const std::string& book, bool legacy = false) {
   const auto hash = legacy ? std::hash<std::string>{}(book) : uzlib_crc32(book.data(), book.size(), 0);
   return "/.crosspoint/bookmarks/epub_" + std::to_string(hash) + ".bin";
 }
-std::string fixture(const std::string& book, uint16_t count, uint8_t version = 5, uint16_t first = 0,
+std::string fixture(const std::string& book, uint16_t count, uint8_t version = 6, uint16_t first = 0,
                     const std::string& title = "Title") {
   std::string bytes;
   pod(bytes, version);
@@ -77,6 +78,7 @@ std::string fixture(const std::string& book, uint16_t count, uint8_t version = 5
     bytes.append(bookmark.chapterTitle, sizeof(bookmark.chapterTitle));
     if (version >= 4) pod(bytes, bookmark.paragraphIndex);
     if (version >= 5) bytes.append(bookmark.snippet, sizeof(bookmark.snippet));
+    if (version >= 6) pod(bytes, uint8_t{0});
   }
   return bytes;
 }
@@ -133,7 +135,7 @@ void largeLoadFailureAndRetry() {
   assert(BOOKMARKS.getBookmarks().size() == 1023);
 }
 void versionsAndHeaderValidation() {
-  for (uint8_t version : {2, 3, 4, 5}) {
+  for (uint8_t version : {2, 3, 4, 5, 6}) {
     reset();
     const auto bytes = fixture(BOOK, 200, version);
     Storage.files[storePath(BOOK)] = bytes;
@@ -336,6 +338,74 @@ void migrationFailuresPreserveBothBooks() {
     }
   }
 }
+void autoBookmarkTrail() {
+  constexpr int pages = 20;
+  const auto at = [](int page) { return static_cast<float>(page) / pages; };
+  const auto addAuto = [&](int page) { return BOOKMARKS.addAutoBookmark(0, at(page), pages, "Ch", UINT16_MAX, "s"); };
+  const auto autoCount = [] {
+    const auto& b = BOOKMARKS.getBookmarks();
+    return static_cast<size_t>(std::count_if(b.begin(), b.end(), [](const Bookmark& x) { return x.isAuto; }));
+  };
+
+  reset();  // flag survives a reload; manual records stay manual
+  assert(load());
+  assert(addAuto(5));
+  assert(BOOKMARKS.addBookmark(0, at(9), pages, "Ch") == BookmarkStore::AddResult::Added);
+  assert(load());
+  assert(BOOKMARKS.getBookmarks().size() == 2);
+  assert(BOOKMARKS.getBookmarks()[0].isAuto && !BOOKMARKS.getBookmarks()[1].isAuto);
+  assert(static_cast<uint8_t>(Storage.files.at(storePath(BOOK))[0]) == 6);
+
+  reset();  // sleeping again on the same page adds nothing
+  assert(load());
+  assert(addAuto(5));
+  assert(!addAuto(5));
+  assert(BOOKMARKS.getBookmarks().size() == 1);
+
+  reset();  // a manual bookmark on the page suppresses the auto one
+  assert(load());
+  assert(BOOKMARKS.addBookmark(0, at(5), pages, "Ch") == BookmarkStore::AddResult::Added);
+  assert(!addAuto(5));
+  assert(BOOKMARKS.getBookmarks().size() == 1 && !BOOKMARKS.getBookmarks()[0].isAuto);
+
+  reset();  // auto bookmarks don't drive the indicator or toggle removal; a manual add converts
+  assert(load());
+  assert(addAuto(5));
+  assert(!BOOKMARKS.hasBookmarkForPage(0, at(5), pages));
+  BOOKMARKS.removeBookmarkForPage(0, at(5), pages);
+  assert(BOOKMARKS.getBookmarks().size() == 1);
+  assert(BOOKMARKS.addBookmark(0, at(5), pages, "Ch") == BookmarkStore::AddResult::Added);
+  assert(BOOKMARKS.getBookmarks().size() == 1 && !BOOKMARKS.getBookmarks()[0].isAuto);
+
+  reset();  // the trail keeps the newest ten and leaves manual bookmarks alone
+  assert(load());
+  assert(BOOKMARKS.addBookmark(0, at(19), pages, "Ch") == BookmarkStore::AddResult::Added);
+  for (int page = 0; page < 12; ++page) assert(addAuto(page));
+  assert(autoCount() == BookmarkStore::MAX_AUTO_BOOKMARKS);
+  const auto& trail = BOOKMARKS.getBookmarks();
+  assert(trail.size() == BookmarkStore::MAX_AUTO_BOOKMARKS + 1);
+  assert(!trail[0].isAuto && trail[1].progress == at(2) && trail[trail.size() - 1].progress == at(11));
+
+  reset();  // returning to an older stop moves it to newest
+  assert(load());
+  assert(addAuto(5) && addAuto(8) && addAuto(5));
+  assert(BOOKMARKS.getBookmarks().size() == 2);
+  assert(BOOKMARKS.getBookmarks()[0].progress == at(8) && BOOKMARKS.getBookmarks()[1].progress == at(5));
+
+  reset();  // v5 files load as manual bookmarks and are rewritten as v6
+  Storage.files[storePath(BOOK)] = fixture(BOOK, 1, 5);
+  assert(load());
+  assert(BOOKMARKS.getBookmarks().size() == 1 && !BOOKMARKS.getBookmarks()[0].isAuto);
+  assert(static_cast<uint8_t>(Storage.files.at(storePath(BOOK))[0]) == 6);
+
+  reset();  // nothing is written after a failed load
+  Storage.files[storePath(BOOK)] = fixture(BOOK, 200);
+  failAllocation = 1;
+  assert(!load());
+  const auto files = Storage.files;
+  assert(!addAuto(3));
+  assert(Storage.files == files && Storage.writes == 0);
+}
 }  // namespace
 int main() {
   largeLoadFailureAndRetry();
@@ -346,6 +416,7 @@ int main() {
   addFailurePreservesLoadedRecords();
   migrationFailuresPreserveBothBooks();
   recordBufferAndMigrationSuccess();
+  autoBookmarkTrail();
   reset();
   std::puts(
       "PASS: bookmark loading, legacy versions/merges, short reads, retry and migration survive allocation failure "

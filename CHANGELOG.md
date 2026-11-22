@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- Optionally add an automatic EPUB bookmark each time the device sleeps, from the power button or the sleep timer, keeping the 10 most recent so you can return to where you stopped in earlier sessions.
+
 ### Changed
 
 - X4 Pro and X4 Classic place medium-sized allocations (over 1 KB) in PSRAM, matching the Sticky, which leaves more internal memory for reading features.

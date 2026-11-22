@@ -14,7 +14,9 @@ namespace {
 constexpr uint8_t LEGACY_VERSION = 2;
 constexpr uint8_t COUNT_U16_VERSION = 3;
 constexpr uint8_t PARAGRAPH_ANCHOR_VERSION = 4;
-constexpr uint8_t VERSION = 5;
+constexpr uint8_t SNIPPET_VERSION = 5;
+constexpr uint8_t VERSION = 6;  // adds per-record flags
+constexpr uint8_t FLAG_AUTO = 0x01;
 // Stored count is uint16_t in v3+, but we keep an in-memory safety cap for ESP32-C3 RAM.
 constexpr uint16_t MAX_BOOKMARKS = 1024;
 constexpr char BOOKMARKS_DIR[] = "/.crosspoint/bookmarks";
@@ -83,11 +85,16 @@ bool readBookmarkCount(FsFile& file, const uint8_t version, uint16_t& count) {
     return true;
   }
 
-  if (version == COUNT_U16_VERSION || version == PARAGRAPH_ANCHOR_VERSION || version == VERSION) {
+  if (version == COUNT_U16_VERSION || version == PARAGRAPH_ANCHOR_VERSION || version == SNIPPET_VERSION ||
+      version == VERSION) {
     return serialization::tryReadPod(file, count);
   }
 
   return false;
+}
+
+bool bookmarkOnPage(const Bookmark& b, uint16_t spineIndex, float pageStart, float pageEnd) {
+  return b.spineIndex == spineIndex && b.progress >= pageStart && b.progress < pageEnd;
 }
 
 bool bookmarksMatchIdentity(const Bookmark& a, const Bookmark& b) {
@@ -245,7 +252,7 @@ bool readBookmarkFileHeader(const std::string& fullPath, const char* name, Bookm
   uint8_t version;
   serialization::readPod(f, version);
   if (version != LEGACY_VERSION && version != COUNT_U16_VERSION && version != PARAGRAPH_ANCHOR_VERSION &&
-      version != VERSION) {
+      version != SNIPPET_VERSION && version != VERSION) {
     f.close();
     return false;
   }
@@ -426,15 +433,73 @@ BookmarkStore::AddResult BookmarkStore::addBookmark(uint16_t spineIndex, float p
   return AddResult::Added;
 }
 
+bool BookmarkStore::addAutoBookmark(uint16_t spineIndex, float progress, int pageCount, const char* chapterTitle,
+                                    uint16_t paragraphIndex, const char* snippet) {
+  if (!writable || pageCount <= 0 || storeFilePath.empty()) return false;
+  const float pageStart = progress;
+  const float pageEnd = progress + 1.0f / static_cast<float>(pageCount);
+
+  const Bookmark* newestAuto = nullptr;
+  for (const auto& b : bookmarks) {
+    const bool onPage = bookmarkOnPage(b, spineIndex, pageStart, pageEnd);
+    if (onPage && !b.isAuto) return false;  // a manual bookmark already marks this page
+    if (b.isAuto) newestAuto = &b;
+  }
+  // Waking and sleeping again without reading leaves the trail untouched.
+  if (newestAuto && bookmarkOnPage(*newestAuto, spineIndex, pageStart, pageEnd)) return false;
+
+  // Drop an older auto bookmark on this page (it moves to the end), then the oldest past the cap.
+  size_t autoCount = 0;
+  for (size_t i = 0; i < bookmarks.size();) {
+    if (bookmarks[i].isAuto && bookmarkOnPage(bookmarks[i], spineIndex, pageStart, pageEnd)) {
+      bookmarks.erase(bookmarks.begin() + i);
+    } else {
+      autoCount += bookmarks[i].isAuto ? 1 : 0;
+      ++i;
+    }
+  }
+  for (size_t i = 0; autoCount >= MAX_AUTO_BOOKMARKS && i < bookmarks.size();) {
+    if (bookmarks[i].isAuto) {
+      bookmarks.erase(bookmarks.begin() + i);
+      --autoCount;
+    } else {
+      ++i;
+    }
+  }
+  if (bookmarks.size() >= MAX_BOOKMARKS) {
+    LOG_ERR("BKS", "Bookmark limit (%u) reached; skipping auto bookmark", MAX_BOOKMARKS);
+    return false;
+  }
+  if (bookmarks.size() + 1 > bookmarks.capacity()) {
+    const size_t capacity = std::min<size_t>(MAX_BOOKMARKS, std::max<size_t>(8, bookmarks.capacity() * 2));
+    if (!bookmarks.reserve(capacity)) {
+      LOG_ERR("BKS", "OOM: adding auto bookmark (%u records)", static_cast<unsigned>(capacity));
+      return false;
+    }
+  }
+
+  Bookmark bm{};
+  bm.spineIndex = spineIndex;
+  bm.progress = progress;
+  bm.timestamp = 0;
+  snprintf(bm.chapterTitle, sizeof(bm.chapterTitle), "%s", chapterTitle ? chapterTitle : "");
+  bm.paragraphIndex = paragraphIndex;
+  snprintf(bm.snippet, sizeof(bm.snippet), "%s", snippet ? snippet : "");
+  bm.isAuto = true;
+  if (!bookmarks.push_back(bm)) return false;
+  dirty = true;
+  saveToFile();
+  return true;
+}
+
 void BookmarkStore::removeBookmarkForPage(uint16_t spineIndex, float pageProgress, int pageCount) {
   if (!writable || pageCount <= 0) return;
   float pageSlice = 1.0f / static_cast<float>(pageCount);
   float pageStart = pageProgress;
   float pageEnd = pageProgress + pageSlice;
 
-  auto it = std::find_if(bookmarks.begin(), bookmarks.end(), [&](const Bookmark& b) {
-    return b.spineIndex == spineIndex && b.progress >= pageStart && b.progress < pageEnd;
-  });
+  auto it = std::find_if(bookmarks.begin(), bookmarks.end(),
+                         [&](const Bookmark& b) { return !b.isAuto && bookmarkOnPage(b, spineIndex, pageStart, pageEnd); });
   if (it == bookmarks.end()) return;
 
   bookmarks.erase(it);
@@ -457,9 +522,8 @@ bool BookmarkStore::hasBookmarkForPage(uint16_t spineIndex, float pageProgress, 
   float pageStart = pageProgress;
   float pageEnd = pageProgress + pageSlice;
 
-  return std::any_of(bookmarks.begin(), bookmarks.end(), [&](const Bookmark& b) {
-    return b.spineIndex == spineIndex && b.progress >= pageStart && b.progress < pageEnd;
-  });
+  return std::any_of(bookmarks.begin(), bookmarks.end(),
+                     [&](const Bookmark& b) { return !b.isAuto && bookmarkOnPage(b, spineIndex, pageStart, pageEnd); });
 }
 
 void BookmarkStore::saveToFile() {
@@ -510,8 +574,9 @@ bool BookmarkStore::readFromFile(const std::string& path, BookmarkRecords& out, 
   }
 
   uint8_t version = 0;
-  if (!serialization::tryReadPod(f, version) || (version != LEGACY_VERSION && version != COUNT_U16_VERSION &&
-                                                 version != PARAGRAPH_ANCHOR_VERSION && version != VERSION)) {
+  if (!serialization::tryReadPod(f, version) ||
+      (version != LEGACY_VERSION && version != COUNT_U16_VERSION && version != PARAGRAPH_ANCHOR_VERSION &&
+       version != SNIPPET_VERSION && version != VERSION)) {
     LOG_ERR("BKS", "Invalid bookmark file version: %s", path.c_str());
     f.close();
     return false;
@@ -525,7 +590,8 @@ bool BookmarkStore::readFromFile(const std::string& path, BookmarkRecords& out, 
   }
   constexpr size_t baseRecordBytes = sizeof(uint16_t) + sizeof(float) + sizeof(uint32_t) + BOOKMARK_CHAPTER_TITLE_MAX;
   const size_t recordBytes = baseRecordBytes + (version >= PARAGRAPH_ANCHOR_VERSION ? sizeof(uint16_t) : 0) +
-                             (version >= VERSION ? BOOKMARK_SNIPPET_MAX : 0);
+                             (version >= SNIPPET_VERSION ? BOOKMARK_SNIPPET_MAX : 0) +
+                             (version >= VERSION ? sizeof(uint8_t) : 0);
   if (static_cast<size_t>(f.available()) < static_cast<size_t>(count) * recordBytes) {
     LOG_ERR("BKS", "Truncated bookmark records: %s", path.c_str());
     f.close();
@@ -540,17 +606,21 @@ bool BookmarkStore::readFromFile(const std::string& path, BookmarkRecords& out, 
   }
   for (uint16_t i = 0; i < count; i++) {
     Bookmark bm{};
+    uint8_t flags = 0;
     if (!serialization::tryReadPod(f, bm.spineIndex) || !serialization::tryReadPod(f, bm.progress) ||
         !serialization::tryReadPod(f, bm.timestamp) ||
         f.read(bm.chapterTitle, sizeof(bm.chapterTitle)) != static_cast<int>(sizeof(bm.chapterTitle)) ||
         (version >= PARAGRAPH_ANCHOR_VERSION && !serialization::tryReadPod(f, bm.paragraphIndex)) ||
-        (version >= VERSION && f.read(bm.snippet, sizeof(bm.snippet)) != static_cast<int>(sizeof(bm.snippet)))) {
+        (version >= SNIPPET_VERSION &&
+         f.read(bm.snippet, sizeof(bm.snippet)) != static_cast<int>(sizeof(bm.snippet))) ||
+        (version >= VERSION && !serialization::tryReadPod(f, flags))) {
       LOG_ERR("BKS", "Failed to read bookmark record %u: %s", i, path.c_str());
       f.close();
       return false;
     }
     bm.chapterTitle[sizeof(bm.chapterTitle) - 1] = '\0';
     bm.snippet[sizeof(bm.snippet) - 1] = '\0';
+    bm.isAuto = (flags & FLAG_AUTO) != 0;
     if (!loadedBookmarks.push_back(bm)) {
       LOG_ERR("BKS", "Bookmark buffer capacity exhausted");
       f.close();
@@ -590,7 +660,8 @@ bool BookmarkStore::writeToFile() const {
          f.write(reinterpret_cast<const uint8_t*>(bm.chapterTitle), sizeof(bm.chapterTitle)) ==
              sizeof(bm.chapterTitle) &&
          serialization::tryWritePod(f, bm.paragraphIndex) &&
-         f.write(reinterpret_cast<const uint8_t*>(bm.snippet), sizeof(bm.snippet)) == sizeof(bm.snippet);
+         f.write(reinterpret_cast<const uint8_t*>(bm.snippet), sizeof(bm.snippet)) == sizeof(bm.snippet) &&
+         serialization::tryWritePod(f, static_cast<uint8_t>(bm.isAuto ? FLAG_AUTO : 0));
   }
   const bool synced = ok && f.sync();
   const bool closed = f.close();

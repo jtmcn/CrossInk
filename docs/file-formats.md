@@ -22,8 +22,12 @@ Nearby. Existing stats/cache versions stay unchanged; no cache reset is needed.
 
 ## Bookmark file safety
 
-Bookmark files under `/.crosspoint/bookmarks/` retain their existing binary
-versions (2–5). No format bump or cache reset is required.
+Bookmark files under `/.crosspoint/bookmarks/` use binary version 6, which
+appends one flags byte to each record (bit 0 = automatic sleep bookmark).
+Versions 2–5 still load and are rewritten as version 6 on first open, so no
+cache reset is required. Firmware that only knows versions 2–5 rejects a
+version 6 file, so downgrading loses access to that book's bookmarks until it
+is upgraded again.
 
 Writes go to `<file>.tmp`, are checked, synced and closed, then replace the
 primary through the shared atomic-file publisher. `<file>.bak` retains the

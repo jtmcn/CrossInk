@@ -180,11 +180,13 @@ void EpubReaderBookmarkListActivity::provideRow(void* user, const uint16_t index
   const Bookmark& bookmark = self->bookmarks[index];
   snprintf(self->rowProgress, sizeof(self->rowProgress), "%d%%",
            static_cast<int>(std::lround(bookmark.progress * 100.0)));
-  item.label = bookmark.snippet[0] != '\0'
-                   ? bookmark.snippet
-                   : (bookmark.chapterTitle[0] != '\0' ? bookmark.chapterTitle : tr(STR_UNKNOWN_CHAPTER));
-  if (bookmark.snippet[0] != '\0') {
-    item.subtitle = bookmark.chapterTitle[0] != '\0' ? bookmark.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
+  const char* chapter = bookmark.chapterTitle[0] != '\0' ? bookmark.chapterTitle : tr(STR_UNKNOWN_CHAPTER);
+  item.label = bookmark.snippet[0] != '\0' ? bookmark.snippet : chapter;
+  if (bookmark.isAuto) {
+    snprintf(self->rowSubtitle, sizeof(self->rowSubtitle), tr(STR_AUTO_BOOKMARK_FORMAT), chapter);
+    item.subtitle = self->rowSubtitle;
+  } else if (bookmark.snippet[0] != '\0') {
+    item.subtitle = chapter;
   }
   item.value = self->rowProgress;
   item.actionValue = static_cast<int16_t>(index);

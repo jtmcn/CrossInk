@@ -790,6 +790,8 @@ To add or remove a bookmark: press **Confirm** to open the Reader Menu, open the
 
 To go to a bookmark: open the Reader Menu, open the **Bookmarks** tab, choose **View Bookmarks**, select a bookmark, and press **Confirm**. To delete all of a book's bookmarks, choose **Clear Bookmark List** in the same tab; you will be asked to confirm.
 
+To keep a trail of where you stopped, turn on **Settings > Reader > Bookmark on Sleep**. Each time the device sleeps with an EPUB open, by the power button or the sleep timer, CrossInk adds an automatic bookmark at the current page, labelled "Auto" in the bookmark list. Only the 10 most recent automatic bookmarks are kept. Sleeping again without turning a page adds nothing, and pages that already have your own bookmark are left alone. Adding your own bookmark on a page turns its automatic bookmark into a regular one.
+
 Each book's bookmarks are saved on the SD card in the `.crosspoint/bookmarks` folder.
 
 ### 5.3 Dictionary

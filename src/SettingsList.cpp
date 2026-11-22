@@ -104,6 +104,8 @@ void forEachBaseSetting(SettingVisitor visitor, void* context) {
                          "screenMarginHorizontal", StrId::STR_CAT_READER));
   add(SettingInfo::Toggle(StrId::STR_PUBLISHER_PAGE_NUMBERS, &CrossPointSettings::publisherPageNumbers,
                           "publisherPageNumbers", StrId::STR_CAT_READER));
+  add(SettingInfo::Toggle(StrId::STR_AUTO_BOOKMARK_ON_SLEEP, &CrossPointSettings::autoBookmarkOnSleep,
+                          "autoBookmarkOnSleep", StrId::STR_CAT_READER));
   add(SettingInfo::Enum(
       StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
       {StrId::STR_JUSTIFY, StrId::STR_DIR_LEFT, StrId::STR_CENTER, StrId::STR_DIR_RIGHT, StrId::STR_BOOK_S_STYLE},

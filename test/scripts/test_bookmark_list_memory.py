@@ -85,7 +85,7 @@ enum class UiListRowType { WithSubtitle };
 int configureUiList(fui::ListProps&, const TestTheme&, fui::Rect, UiListRowType) { return 8; }
 int scrollListBy(int top, int, int, int) { return top; }
 const char* tr(int) { return "Unknown"; }
-constexpr int STR_UNKNOWN_CHAPTER = 1, STR_NO_BOOKMARKS = 2;
+constexpr int STR_UNKNOWN_CHAPTER = 1, STR_NO_BOOKMARKS = 2, STR_AUTO_BOOKMARK_FORMAT = 3;
 constexpr int ACTION_DELETE = 2, ACTION_ROW = 1;
 struct Swipe {
   fui::ListRevealAction reveal(int) { return {}; }
@@ -96,6 +96,7 @@ struct EpubReaderBookmarkListActivity {
   };
   const std::vector<Bookmark>& bookmarks;
   char rowProgress[16]{};
+  char rowSubtitle[BOOKMARK_CHAPTER_TITLE_MAX + 32]{};
   Renderer renderer;
   int mappedInput = 0, uiTarget = 0, selectedIndex = 0, topIndex = 0, visibleRows = 1;
   Swipe swipeDelete;
@@ -109,6 +110,7 @@ int main() {
     std::vector<Bookmark> bookmarks(count);
     for (auto& b : bookmarks) {
       b.progress = 0.5f;
+      b.isAuto = (&b - bookmarks.data()) % 2 == 1;  // cover the auto-bookmark subtitle row
       std::snprintf(b.chapterTitle, sizeof b.chapterTitle, "Chapter");
     }
     EpubReaderBookmarkListActivity activity{bookmarks};

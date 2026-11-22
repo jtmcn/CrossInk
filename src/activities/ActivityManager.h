@@ -107,6 +107,7 @@ class ActivityManager {
   // is intentionally not persisted as recent-book order.
   std::string preferredHomeBookPath;
   bool returningHomeThroughSettings = false;
+  bool exitingForSleep = false;
 
   // Task to render and display the activity
   TaskHandle_t renderTaskHandle = nullptr;
@@ -180,6 +181,8 @@ class ActivityManager {
   void goToReaderAndRunMenuAction(std::string path, uint8_t action);
   // Returns true only when sleep rendered a known complete B/W frame.
   bool goToSleep(bool fromTimeout = false);
+  // True only inside goToSleep(), while the outgoing activities run onExit().
+  bool isExitingForSleep() const { return exitingForSleep; }
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
