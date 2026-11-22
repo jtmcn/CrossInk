@@ -28,6 +28,14 @@ class StatusTest(unittest.TestCase):
         self.assertIn('a.txt', out)
         self.assertIn('pin: matches crossink tip', out)
 
+    def test_upstream_branch_override_changes_app_merge_base_only(self):
+        self.assertEqual(self.p.upstream_base('app'), 'upstream/main')
+        self.assertNotIn('merging from', self.text())
+        git(self.fx.root, 'config', 'personal.upstreamBranch', 'release/v9')
+        self.assertEqual(self.p.upstream_base('app'), 'upstream/release/v9')
+        self.assertEqual(self.p.upstream_base('sdk'), 'origin/main')
+        self.assertEqual(self.p.upstream_main('app'), 'upstream/main')
+
     def test_retired_topic_prints_delete_command(self):
         self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
         merged = git(self.fx.sdk, 'rev-parse', 'crossink')

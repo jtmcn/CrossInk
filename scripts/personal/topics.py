@@ -64,7 +64,7 @@ class Pairing:
 
 
 def derive_pairs(p: Project) -> Pairing:
-    upstream = p.upstream_main(APP)
+    upstream = p.upstream_base(APP)
     names = local_topics(p, APP)
     depth = {t: int(p.git(APP, 'rev-list', '--count', f'{upstream}..{t}')) for t in names}
     owner = {}

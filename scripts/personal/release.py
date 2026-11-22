@@ -45,7 +45,7 @@ def check_guards(p: Project) -> list[str]:
     for repo, rev in ((APP, 'HEAD'), (SDK, pin)):
         spec = p.spec(repo)
         p.fetch(repo, spec.upstream_remote)
-        behind = int(p.git(repo, 'rev-list', '--count', f'{rev}..{p.upstream_main(repo)}'))
+        behind = int(p.git(repo, 'rev-list', '--count', f'{rev}..{p.upstream_base(repo)}'))
         if behind:
             warnings.append(f'{spec.name} is {behind} commit(s) behind upstream; consider `bin/personal sync`')
     return warnings

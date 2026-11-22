@@ -55,6 +55,11 @@ class Project:
     def upstream_main(self, repo: str) -> str:
         return f'{self.spec(repo).upstream_remote}/main'
 
+    def upstream_base(self, repo: str) -> str:
+        # What personal merges from; `git config personal.upstreamBranch release/vX` tracks a release branch early.
+        branch = self.git(repo, 'config', '--get', 'personal.upstreamBranch', check=False) if repo == APP else ''
+        return f'{self.spec(repo).upstream_remote}/{branch or "main"}'
+
     def pinned_sdk(self, rev: str = 'HEAD') -> str:
         # ls-tree prints "160000 commit <sha>\tfreeink-sdk" for the gitlink.
         out = self.git(APP, 'ls-tree', rev, SDK_PATH, check=False)

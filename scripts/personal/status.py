@@ -20,6 +20,8 @@ def repo_lines(p: Project, repo: str) -> list[str]:
     ahead, behind = p.git(repo, 'rev-list', '--left-right', '--count', f'{spec.fork_remote}/main...{up}').split()
     drift = '' if ahead == behind == '0' else '  <- fork main should mirror upstream; `sync` fixes'
     lines.append(f'fork main vs upstream: {ahead} ahead, {behind} behind{drift}')
+    if p.upstream_base(repo) != up:
+        lines.append(f'merging from {p.upstream_base(repo)} (git config personal.upstreamBranch)')
     if not _has_ref(p, repo, f'refs/heads/{spec.integration}'):
         lines.append(f'`{spec.integration}` branch missing')
         return lines

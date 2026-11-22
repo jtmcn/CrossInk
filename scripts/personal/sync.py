@@ -53,7 +53,7 @@ def _resolve_gitlink_conflict(p: Project) -> None:
 
 
 def _merge_upstream(p: Project, repo: str, out) -> None:
-    spec, upstream = p.spec(repo), p.upstream_main(repo)
+    spec, upstream = p.spec(repo), p.upstream_base(repo)
     if p.git_ok(repo, 'merge-base', '--is-ancestor', upstream, 'HEAD'):
         out(f'{spec.name}: `{spec.integration}` already contains {upstream}')
         return
@@ -93,7 +93,7 @@ def sync(p: Project, out=print) -> None:
         _merge_upstream(p, repo, out)
 
     # Covers clean merges and hand-resolved conflicts, which the conflict path alone would miss.
-    _require_sdk_has_pin(p, p.pinned_sdk(p.upstream_main(APP)))
+    _require_sdk_has_pin(p, p.pinned_sdk(p.upstream_base(APP)))
     tip = p.git(SDK, 'rev-parse', 'HEAD')
     if p.pinned_sdk() != tip:
         p.git(APP, 'add', SDK_PATH)

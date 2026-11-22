@@ -44,6 +44,8 @@ refuses if it has diverged, so never merge anything into it.
 | `bin/personal monitor` | Serial monitor saved to `device-logs/serial-*.log`. |
 | `bin/personal logs` | With the reader in USB Drive mode, copies `.crosspoint/logs/*` and `crash_report.txt` into `device-logs/<timestamp>/`. |
 
+To follow an upstream release branch before it reaches `main`, run `git config personal.upstreamBranch release/vX.Y.Z`; `sync`, `release` and topic depth then use it, while fork `main` keeps mirroring upstream `main`. `git config --unset personal.upstreamBranch` once upstream merges the release.
+
 ## Release runbook
 
 1. `git switch personal`; merge any finished topic with `git merge --no-ff joel/<topic>`; push.
