@@ -112,6 +112,7 @@ int main(int argc, char** argv) {
     const size_t count = (size_t(glyph->width) * glyph->height + 3) / 4;
     const std::vector<uint8_t> expected(savedPixels, savedPixels + count);
     size_t refused = 0;
+    HalScalableFont::takeCacheStats();
     {
       HalScalableFont::IdlePrewarmScope admission;
       for (uint8_t points = ScalableContentMinPointSize; points <= ScalableContentMaxPointSize; ++points) {
@@ -128,6 +129,8 @@ int main(int argc, char** argv) {
       }
     }
     assert(refused > 0);
+    const auto idleStats = HalScalableFont::takeCacheStats();
+    assert(idleStats.pixelEvictions == 0 && idleStats.metricEvictions == 0 && idleStats.kerningEvictions == 0);
     // A prior HAL refusal must not mask a genuine failure from another handler.
     EpdFontData foreign = *data;
     foreign.bitmapHandler = [](void*, const EpdGlyph*) -> const uint8_t* { return nullptr; };
@@ -136,6 +139,32 @@ int main(int argc, char** argv) {
     assert(std::equal(expected.begin(), expected.end(), savedPixels));
     // Normal foreground rasterization is still allowed after the scope exits.
     assert(builtin[1].probeGlyph('Z', ScalableContentMaxPointSize));
+  }
+  {
+    // A page mixing four styles and two sizes must stay resident across its BW/AA redraws.
+    const auto drawPage = [&] {
+      for (size_t face = 0; face < 4; ++face) {
+        for (unsigned size : {12u, 16u}) {
+          const auto* data = builtin[face].atSize(size)->data;
+          for (unsigned cp = 0x21; cp < 0x7F; ++cp) {
+            const auto* glyph = data->dynamicGlyphHandler(data->glyphMissCtx, cp);
+            assert(glyph);
+            if (glyph->width && glyph->height) assert(data->bitmapHandler(data->glyphMissCtx, glyph));
+            if (cp > 0x21 && data->kerningHandler) data->kerningHandler(data->glyphMissCtx, cp - 1, cp);
+          }
+        }
+      }
+    };
+    drawPage();
+    HalScalableFont::takeCacheStats();
+    drawPage();
+    const auto stats = HalScalableFont::takeCacheStats();
+    std::printf("Warm mixed-style page: pixel hit %u miss %u; metric hit %u miss %u; kern hit %u miss %u\n",
+                unsigned(stats.pixelHits), unsigned(stats.pixelMisses), unsigned(stats.metricHits),
+                unsigned(stats.metricMisses), unsigned(stats.kerningHits), unsigned(stats.kerningMisses));
+    assert(stats.pixelHits > 0 && stats.pixelMisses == 0 && stats.pixelEvictions == 0);
+    assert(stats.metricHits > 0 && stats.metricMisses == 0 && stats.metricEvictions == 0);
+    assert(stats.kerningMisses == 0 && stats.kerningEvictions == 0);
   }
   freeink::font::FtFont::RenderOptions options;
   options.hinting = freeink::font::FtFont::HintingMode::Auto;

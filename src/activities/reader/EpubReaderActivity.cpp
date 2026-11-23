@@ -7381,6 +7381,18 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     pageBufferStale.store(false, std::memory_order_relaxed);
     lastRenderCompleteMs = millis();
 #if CROSSINK_SCALABLE_FONTS
+    {
+      // Includes idle lookahead since the previous render; idle misses must not add evictions.
+      [[maybe_unused]] const auto ttf = HalScalableFont::takeCacheStats();
+      LOG_DBG("ERS",
+              "TTF cache: pixel hit %lu miss %lu evict %lu reset %lu; metric hit %lu miss %lu evict %lu; "
+              "kern hit %lu miss %lu evict %lu",
+              static_cast<unsigned long>(ttf.pixelHits), static_cast<unsigned long>(ttf.pixelMisses),
+              static_cast<unsigned long>(ttf.pixelEvictions), static_cast<unsigned long>(ttf.pixelArenaResets),
+              static_cast<unsigned long>(ttf.metricHits), static_cast<unsigned long>(ttf.metricMisses),
+              static_cast<unsigned long>(ttf.metricEvictions), static_cast<unsigned long>(ttf.kerningHits),
+              static_cast<unsigned long>(ttf.kerningMisses), static_cast<unsigned long>(ttf.kerningEvictions));
+    }
     idleTtfSection = section.get();
     idleTtfSpine = currentSpineIndex;
     idleTtfVisiblePage = section->currentPage;
