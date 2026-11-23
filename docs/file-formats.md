@@ -590,7 +590,7 @@ if (parsedSize != fileSize) {
 
 ## `reader_settings.bin`
 
-### Version 16
+### Version 17
 
 Each EPUB cache directory may contain `reader_settings.bin`. Missing files mean
 the book uses global Reader settings and the default auto-page-turn interval.
@@ -615,6 +615,11 @@ Version 11 appends the image-grayscale toggle after the mask and moves the SD-fo
 mask bit from 18 to 19. Older records retain their existing overrides and inherit
 the global image-grayscale setting. This drawing-only setting does not invalidate
 EPUB layout or image caches.
+Version 17 appends `u8 wordHoldAction` when the book overrides the global
+Long-press Text setting. Books that use the global setting are still saved as
+version 16. Versions 1–16 inherit the global action. This setting does not
+affect EPUB layout caches.
+
 Version 16 appends `u8 ruledLines` (0 Off, 1 Light, 2 Medium, 3 Dark), with override bit 24. Older books inherit the global setting. Changing the shade redraws the page using its existing layout.
 
 Version 15 appends `u8 twoToneTextAA` (0 off, 1 on), with override bit 23. Older records inherit the global EEGO text AA quality. Changing it preserves the EPUB layout cache.
@@ -635,7 +640,7 @@ fallback successfully opens a difficult book.
 
 ```c++
 struct ReaderSettingsBin {
-    u8 version; // 16
+    u8 version; // 16 or 17
     u8 flags;   // bit 0 = at least one custom reader field, bit 1 = custom auto-page-turn interval, bit 2 = render mode override, bit 3 = dictionary font override, bit 4 = Safe Mode override
     u16 autoPageTurnSeconds;
     u8 renderMode; // 0 = CrossInk Default, 1 = Balanced, 2 = Light
@@ -669,6 +674,7 @@ struct ReaderSettingsBin {
     u8 textDarkness; // 0 Normal, 1 Dark, 2 Darker; override bit 22
     u8 twoToneTextAA; // 0 off, 1 on; override bit 23
     u8 ruledLines; // 0 Off, 1 Light, 2 Medium, 3 Dark; override bit 24
+    u8 wordHoldAction; // version 17 only: 0 Look Up, 1 Clip, 2 Ask
 };
 ```
 
@@ -1148,6 +1154,15 @@ in their combined reader font identity. Secondary-size ligatures remain resident
 through cache cleanup, so measurement and drawing use the same glyph substitutions.
 The new identity rebuilds existing full and partial layouts for these families;
 body-only and built-in font identities stay unchanged. No binary payload changes.
+
+## Inline EPUB image pixel cache (`.pxc`)
+
+Inline images use separate target-sized Gray (`_gray_v4.pxc`) and monochrome
+(`_mono_v1.pxc`) cache identities. Both use the existing 2-bit packed rows;
+monochrome stores only black (0) and white (3), including in Night Mode. Older
+pixel-cache names are ignored and can be regenerated without invalidating
+chapter layout or reading progress. Optimizer sidecars are only usable for Gray
+and at their exact dimensions; mismatches fall back to the source EPUB image.
 
 ## `section.bin`
 
@@ -2083,6 +2098,16 @@ languages, invalid bounds, uncommitted banks and bad header/payload checksums
 are rejected. Boot selects the highest fully valid generation. Generations do
 not wrap; exhausting u32 rejects a further update. A successful update requires
 a restart before another operation or activation of its new mapping.
+
+Local-only packs use an optional 256-byte header at bank offset 256. It shares
+the entry format, generation, and CRC rules of the first header, but uses
+`CIHX` version 1 and has zero at offset 24. Its entries begin immediately after
+the ordinary payloads, and both headers together describe at most ten packs.
+The legacy `CIHP` header describes only the ordinary prefix. Installing either
+kind writes and verifies all payloads before programming the original `CIHP`
+commit marker. If the optional header or its data fails validation, only the
+legacy prefix is exposed. Older firmware can still read the prefix; rewriting
+the bank with older firmware drops the extension without deleting its SD sources.
 
 ## OPDS server filenames
 
