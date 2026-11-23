@@ -20,14 +20,15 @@ def repo_lines(p: Project, repo: str) -> list[str]:
     ahead, behind = p.git(repo, 'rev-list', '--left-right', '--count', f'{spec.fork_remote}/main...{up}').split()
     drift = '' if ahead == behind == '0' else '  <- fork main should mirror upstream; `sync` fixes'
     lines.append(f'fork main vs upstream: {ahead} ahead, {behind} behind{drift}')
-    if p.upstream_base(repo) != up:
-        lines.append(f'merging from {p.upstream_base(repo)} (git config personal.upstreamBranch)')
+    base = p.upstream_base(repo)
+    if base != up:
+        lines.append(f'merging from {base} (git config personal.upstreamBranch)')
     if not _has_ref(p, repo, f'refs/heads/{spec.integration}'):
         lines.append(f'`{spec.integration}` branch missing')
         return lines
     lines.append(f'`{spec.integration}` behind upstream: '
-                 f'{p.git(repo, "rev-list", "--count", f"{spec.integration}..{up}")} commit(s)')
-    delta = p.git(repo, 'diff', '--stat', f'{up}...{spec.integration}')
+                 f'{p.git(repo, "rev-list", "--count", f"{spec.integration}..{base}")} commit(s)')
+    delta = p.git(repo, 'diff', '--stat', f'{base}...{spec.integration}')
     lines.append('fork delta:' if delta else 'fork delta: none')
     lines += _indent(delta)
     for topic in topics.local_topics(p, repo):

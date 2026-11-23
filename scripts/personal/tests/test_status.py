@@ -36,6 +36,18 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(self.p.upstream_base('sdk'), 'origin/main')
         self.assertEqual(self.p.upstream_main('app'), 'upstream/main')
 
+    def test_release_branch_override_drives_behind_count_and_fork_delta(self):
+        work = self.fx._work_clone(self.fx.app_upstream, 'app-up-work')
+        git(work, 'checkout', '-q', '-b', 'release/v9')
+        self.fx.commit(work, 'rel.txt', 'x\n', 'upstream app: release-only')
+        git(work, 'push', '-q', 'origin', 'release/v9')
+        git(self.fx.root, 'config', 'personal.upstreamBranch', 'release/v9')
+        self.assertIn('`personal` behind upstream: 1 commit(s)', self.text())
+        git(self.fx.root, 'merge', '-q', '--no-edit', 'upstream/release/v9')
+        out = self.text()
+        self.assertIn('`personal` behind upstream: 0 commit(s)', out)
+        self.assertNotIn('rel.txt', out)
+
     def test_retired_topic_prints_delete_command(self):
         self.fx.add_sdk_topic('joel/sdk-a', 'a.txt')
         merged = git(self.fx.sdk, 'rev-parse', 'crossink')
