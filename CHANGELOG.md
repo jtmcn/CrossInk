@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- Opening a book, or waking into one without Quick Resume, no longer blanks the screen for a Loading notice when the book opens quickly. The notice still appears if opening takes longer than a second.
+
 ## [v2.0.0] - 2026-11-19
 
 ### Added

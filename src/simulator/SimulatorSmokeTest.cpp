@@ -10341,8 +10341,10 @@ class SimulatorSmokeTest {
           RenderLock lock;
           BookLoadingFeedback feedback;
           feedback.start();
-          if (!feedback.showIfPending(renderer)) fail("Book open omitted immediate loading feedback");
-          captureStatusBarScreen("book-loading-immediate");
+          if (feedback.showIfPending(renderer)) fail("Quick book open showed loading feedback");
+          delay(BookLoadingFeedback::DELAY_MS);
+          if (!feedback.showIfPending(renderer)) fail("Slow book open omitted loading feedback");
+          captureStatusBarScreen("book-loading-delayed");
           if (feedback.showIfPending(renderer)) fail("Book loading feedback refreshed twice");
           const auto frameHash = []() {
             uint32_t hash = 2166136261U;
@@ -10359,6 +10361,7 @@ class SimulatorSmokeTest {
             // Reproduce the old handoff: portrait Loading followed by rotated Indexing.
             renderer.setOrientation(GfxRenderer::Portrait);
             feedback.start();
+            delay(BookLoadingFeedback::DELAY_MS);
             feedback.showIfPending(renderer);
             renderer.setOrientation(orientation);
             feedback.showIndexing(renderer);
@@ -10372,7 +10375,7 @@ class SimulatorSmokeTest {
             if (feedback.showIfPending(renderer)) fail("Loading replaced Indexing");
           }
           renderer.setOrientation(originalOrientation);
-          LOG_INF("SMOKE", "Immediate book loading feedback passed");
+          LOG_INF("SMOKE", "Delayed book loading feedback passed");
         }
         activityManager.goToFileBrowser("/books");
         queueStep("File Browser", SmokeStep::FileBrowser);
