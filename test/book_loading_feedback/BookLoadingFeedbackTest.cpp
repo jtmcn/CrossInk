@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #include <cassert>
 
 #include "BookLoadingFeedback.h"
@@ -10,7 +12,14 @@ int main() {
   BookLoadingFeedback feedback;
   assert(!feedback.showIfPending(renderer));  // Direct reader construction is quiet.
 
+  // Quick opens stay quiet: no blank screen or popup before the delay.
   feedback.start();
+  fakeMillis += BookLoadingFeedback::DELAY_MS - 1;
+  assert(!feedback.showIfPending(renderer));
+  assert(GUI.draws == 0);
+  assert(renderer.clears == 0);
+  fakeMillis += 1;
+
   renderer.available = false;
   assert(!feedback.showIfPending(renderer));  // Never touch lent build scratch.
   renderer.available = true;
@@ -25,7 +34,8 @@ int main() {
 
   feedback.start();
   BookLoadingFeedback handedOff = feedback;
-  assert(handedOff.showIfPending(renderer));  // Pending feedback survives the reader handoff.
+  fakeMillis += BookLoadingFeedback::DELAY_MS;  // The delay keeps running across the handoff.
+  assert(handedOff.showIfPending(renderer));    // Pending feedback survives the reader handoff.
   assert(GUI.draws == 2);
   BookLoadingFeedback afterPopup = handedOff;
   assert(!afterPopup.showIfPending(renderer));
@@ -46,5 +56,14 @@ int main() {
   feedback.showIndexing(renderer);
   assert(renderer.clears == 4);
   renderer.available = true;
+  fakeMillis += BookLoadingFeedback::DELAY_MS;
   assert(!feedback.showIfPending(renderer));
+
+  // Elapsed time survives a millis() wrap.
+  fakeMillis = UINT32_MAX - 10;
+  feedback.start();
+  fakeMillis += 20;
+  assert(!feedback.showIfPending(renderer));
+  fakeMillis += BookLoadingFeedback::DELAY_MS;
+  assert(feedback.showIfPending(renderer));
 }

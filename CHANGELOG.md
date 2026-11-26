@@ -15,6 +15,10 @@
 - Page turns with TTF and built-in scalable fonts on ESP32-S3 devices no longer redraw letters that were just drawn when a page mixes bold, italic, or heading text, removing occasional slow turns.
 - Opening an unindexed chapter with TTF and built-in scalable fonts on ESP32-S3 devices is faster: kerning results now stay cached across a chapter, cutting layout time by roughly a third.
 
+### Fixed
+
+- Opening a book, or waking into one without Quick Resume, no longer blanks the screen for a Loading notice when the book opens quickly. The notice still appears if opening takes longer than a second.
+
 ## [v2.0.0] - 2026-11-19
 
 ### Added
