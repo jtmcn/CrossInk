@@ -11,7 +11,7 @@ class BookLoadingFeedback {
   bool pending = false;
 
  public:
-  // Cached X4 Pro opens reach their last checkpoint ~0.7 s after start (2.0 SD logs).
+  // Cached X4 Pro opens load the first page ~0.65 s after start (2.0 SD logs).
   static constexpr uint32_t DELAY_MS = 1000;
 
   void start();
