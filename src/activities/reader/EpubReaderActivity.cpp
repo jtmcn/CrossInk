@@ -8088,9 +8088,9 @@ bool EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       !deferImageLoading && pageHasImages && page->hasImagesNeedingDecode(needsImageGrayscale);
 
   if (updatePanel) {
-    // First-page glyph and image checks can be slower than opening the book.
-    // Clear a newly drawn popup before composing the page; no second buffer is needed.
-    if (showOpeningFeedback()) renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+    // Glyphs are prewarmed by now; only image decode can still be slow. A popup here
+    // costs a refresh plus ~1.5 s for a text page that is ~200 ms from the panel.
+    if (pageHasImagesNeedingDecode && showOpeningFeedback()) renderer.clearScreen(ReaderUtils::readerBackgroundColor());
     openingFeedback.finish();
   }
 
