@@ -18,6 +18,8 @@
 ### Fixed
 
 - Opening a book, or waking into one without Quick Resume, no longer blanks the screen for a Loading notice when the book opens quickly. The notice still appears if opening takes longer than a second.
+- Waking into a book no longer sometimes shows the Loading notice just before a text page appears, which added an extra screen refresh and about 1.5 seconds.
+- On X4 Pro units with the UltraChip UC8279 display, the first screen after a book page (the reader menu, Home, or the sleep cover) no longer flashes black and white.
 
 ## [v2.0.0] - 2026-11-19
 
